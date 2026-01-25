@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.eggs/
+
+# Datos de prueba y salida (grandes)
+test_data/
+output/
+
+# Backups y versiones previas
+backup_releases/
+
+# Blender y binarios
+blend-example/
+*.blend
+*.blend1
+
+# Proyecto BLOSM (sub-proyecto externo)
+blosm-release/
+
+# Configuración local
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Archivos especiales/vacíos
+nul
+
+# Plans de desarrollo (interno)
+plans/
+
+# Specs de desarrollo (interno)
+specs-v3.md
+
+# PDFs generados
+docs/*.pdf
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
