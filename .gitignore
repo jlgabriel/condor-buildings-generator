@@ -44,8 +44,8 @@ plans/
 # Specs de desarrollo (interno)
 specs-v3.md
 
-# PDFs generados
-docs/*.pdf
+# Documentación (interno)
+docs/
 
 # Environments
 .env
