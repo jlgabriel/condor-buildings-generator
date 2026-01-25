@@ -1275,3 +1275,15 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - OpenStreetMap contributors for building data
 - BLOSM project for roof generation algorithms
 - Condor Soaring community
+
+---
+
+## Team
+
+This project was developed by:
+
+- **Wiek Schoenmakers** - Technical Lead & Condor Specialist. Provided requirements, domain expertise on Condor flight simulator, and guidance on scenery building.
+
+- **Juan Luis Gabriel** - Project Manager & Orchestrator. Coordinated requirements gathering, communication between team members, and project direction.
+
+- **Anthropic Claude Opus 4.5** (via Claude Code) - Software Development. Designed the solution architecture and implemented all code for this project.
