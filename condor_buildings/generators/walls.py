@@ -539,8 +539,8 @@ def generate_walls_for_hipped(
     Unlike gabled roofs, there are no pentagonal gable end walls because
     the hipped roof slopes on all four sides.
 
-    This is essentially the same as generate_walls(), but provided as a
-    separate function for clarity and future customization.
+    Like gabled side walls, hipped walls use SINGLE continuous quads (no per-floor
+    splitting) with continuous UV mapping for multi-story appearance.
 
     Args:
         building: Building record with footprint and heights
@@ -549,6 +549,109 @@ def generate_walls_for_hipped(
     Returns:
         MeshData with wall geometry
     """
-    # Hipped roofs have rectangular walls on all sides
-    # The roof covers everything from wall_top_z upward
-    return generate_walls(building, config)
+    if config is None:
+        config = WallGeneratorConfig()
+
+    mesh = MeshData(osm_id=building.osm_id)
+
+    floor_z = building.floor_z
+    wall_top_z = building.wall_top_z
+    ring = building.footprint.outer_ring
+
+    # Get texture variations for this building (deterministic)
+    _, facade_index = select_building_variations(building.seed)
+
+    n = len(ring)
+    if n < 3:
+        return mesh
+
+    # Handle closed ring
+    if ring[0].x == ring[-1].x and ring[0].y == ring[-1].y:
+        n -= 1
+
+    # Generate continuous walls (single quad per edge, no floor splits)
+    for i in range(n):
+        j = (i + 1) % n
+        p0 = ring[i]
+        p1 = ring[j]
+
+        # Edge length for UV mapping
+        edge_dx = p1.x - p0.x
+        edge_dy = p1.y - p0.y
+        edge_len = math.sqrt(edge_dx * edge_dx + edge_dy * edge_dy)
+
+        if edge_len < 0.01:
+            continue
+
+        # Use continuous UV mapping (same as gabled side walls)
+        _generate_side_wall_with_uvs(
+            mesh, p0, p1, floor_z, wall_top_z, edge_len, facade_index,
+            building.floors
+        )
+
+    # Generate hole walls (if any)
+    for hole in building.footprint.holes:
+        _generate_hipped_hole_walls(
+            mesh, hole, floor_z, wall_top_z, facade_index, building.floors
+        )
+
+    return mesh
+
+
+def _generate_hipped_hole_walls(
+    mesh: MeshData,
+    ring: List[Point2D],
+    floor_z: float,
+    wall_top_z: float,
+    facade_index: int,
+    building_floors: int
+) -> None:
+    """
+    Generate continuous wall quads for a hole ring (inward-facing) for hipped buildings.
+
+    Like outer walls, uses single continuous quads with UV interpolation.
+
+    Args:
+        mesh: MeshData to add to
+        ring: Hole ring vertices
+        floor_z: Floor elevation
+        wall_top_z: Wall top elevation
+        facade_index: Facade style index
+        building_floors: Number of floors
+    """
+    n = len(ring)
+    if n < 3:
+        return
+
+    # Handle closed ring
+    if ring[0].x == ring[-1].x and ring[0].y == ring[-1].y:
+        n -= 1
+
+    for i in range(n):
+        j = (i + 1) % n
+        p0 = ring[i]
+        p1 = ring[j]
+
+        edge_dx = p1.x - p0.x
+        edge_dy = p1.y - p0.y
+        edge_len = math.sqrt(edge_dx * edge_dx + edge_dy * edge_dy)
+
+        if edge_len < 0.01:
+            continue
+
+        # Get continuous UVs
+        uvs = compute_sidewall_continuous_uvs(edge_len, building_floors, facade_index)
+
+        # Create vertices with REVERSED winding for inward-facing normals
+        bl = mesh.add_vertex(p1.x, p1.y, floor_z)
+        br = mesh.add_vertex(p0.x, p0.y, floor_z)
+        tr = mesh.add_vertex(p0.x, p0.y, wall_top_z)
+        tl = mesh.add_vertex(p1.x, p1.y, wall_top_z)
+
+        # Reverse UV order for reversed winding
+        uv_bl = mesh.add_uv(uvs[1][0], uvs[1][1])
+        uv_br = mesh.add_uv(uvs[0][0], uvs[0][1])
+        uv_tr = mesh.add_uv(uvs[3][0], uvs[3][1])
+        uv_tl = mesh.add_uv(uvs[2][0], uvs[2][1])
+
+        mesh.add_quad_with_uvs(bl, br, tr, tl, uv_bl, uv_br, uv_tr, uv_tl)
