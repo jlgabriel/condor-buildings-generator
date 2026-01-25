@@ -7,5 +7,5 @@ for Condor 3 flight simulator.
 Milestone A: Single-patch prototype with LOD0/LOD1 OBJ export.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.7"
 __author__ = "Condor Buildings Team"

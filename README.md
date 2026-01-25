@@ -1,6 +1,6 @@
 # Condor Buildings Generator
 
-[![Version](https://img.shields.io/badge/version-0.3.6-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
+[![Version](https://img.shields.io/badge/version-0.3.7-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
@@ -1255,6 +1255,7 @@ Condor 3D (x, y, z)
 | 0.3.4 | Jan 21, 2025 | Wall UV 3m blocks + door offset, hipped roofs implementation |
 | 0.3.5 | Jan 24, 2025 | Roof selection mode (`geometry` / `osm_tags_only`), CLAUDE.md quick reference |
 | 0.3.6 | Jan 24, 2025 | Hipped roof Z positioning fix (no more floating), house-scale thresholds +20% |
+| 0.3.7 | Jan 25, 2025 | Hipped roof walls use continuous quads (no floor splits) |
 
 ### Changelog Files
 

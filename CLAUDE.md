@@ -78,4 +78,4 @@ condor_buildings/
 
 ## Current Version
 
-v0.3.6 - Phase 2 complete (UV mapping + texture atlas + hipped roofs with Z fix)
+v0.3.7 - Phase 2 complete (UV mapping + texture atlas + hipped roofs with continuous wall quads)
