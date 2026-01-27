@@ -1,14 +1,19 @@
 # Condor Buildings Generator
 
-[![Version](https://img.shields.io/badge/version-0.3.7-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
+[![Blender](https://img.shields.io/badge/blender-4.0+-orange.svg)](https://www.blender.org/)
 [![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
 A Python pipeline that generates 3D building meshes from OpenStreetMap (OSM) data for use in the **Condor 3** flight simulator. The pipeline produces OBJ files with UV coordinates compatible with Condor's terrain system.
 
+**Now available as a Blender addon!** Generate buildings directly in Blender's viewport.
+
 ---
 
 ## Quick Start
+
+### Option 1: Command Line
 
 ```bash
 # Clone the repository
@@ -22,6 +27,26 @@ python -m condor_buildings.main \
   --output-dir ./output \
   --verbose
 ```
+
+### Option 2: Blender Addon (v0.5.0+)
+
+1. Download `condor_buildings_v0.5.0.zip` from releases
+2. In Blender: Edit > Preferences > Add-ons > Install
+3. Select the ZIP file
+4. Enable "Condor Buildings Generator" addon
+5. Open the sidebar in 3D View (press N)
+6. Navigate to the "Condor" tab
+7. Set your Condor installation path (e.g., `C:\Condor3`)
+8. Select a landscape from the dropdown
+9. Set patch range (X/Y min/max) or enable single patch mode
+10. Click "Generate Buildings"
+
+**New in v0.5.0:**
+- Auto-detects landscapes from Condor folder structure
+- Downloads OSM building data on-the-fly from Overpass API
+- Supports batch processing of multiple patches
+- Saves OBJ files to `Working/Autogen` folder
+- Imports meshes directly into Blender viewport
 
 ### Input Files Required
 
@@ -52,6 +77,8 @@ Place these files in your `--patch-dir`:
 - **UV mapping**: Full texture atlas support (6 roof patterns, 12 facade styles)
 - **Two LOD levels**: LOD0 (detailed) and LOD1 (simplified)
 - **Deterministic output**: Same seed produces identical results
+- **Blender integration**: Import buildings directly into Blender (v0.5.0+ with Condor workflow support)
+- **Zero dependencies**: Uses only Python standard library (works anywhere)
 
 ---
 
@@ -110,9 +137,16 @@ The Condor Buildings Generator is a standalone Python pipeline that generates 3D
 
 ```
 condor_buildings/
-├── __init__.py              # Package version
+├── __init__.py              # Package version + Blender addon registration
 ├── main.py                  # CLI entry point and pipeline orchestrator
 ├── config.py                # Configuration constants and PipelineConfig
+├── blender/                 # Blender addon package (v0.5.0+)
+│   ├── __init__.py          # Blender addon initialization
+│   ├── properties.py        # Blender PropertyGroup for UI fields
+│   ├── operators.py         # Import/clear operators with Condor workflow
+│   ├── panels.py            # UI panels (sidebar)
+│   ├── mesh_converter.py    # MeshData → Blender mesh conversion
+│   └── osm_downloader.py    # Download OSM data from Overpass API
 ├── models/
 │   ├── geometry.py          # Point2D, Point3D, Polygon, BBox
 │   ├── building.py          # BuildingRecord, BuildingCategory, RoofType
@@ -1256,6 +1290,8 @@ Condor 3D (x, y, z)
 | 0.3.5 | Jan 24, 2025 | Roof selection mode (`geometry` / `osm_tags_only`), CLAUDE.md quick reference |
 | 0.3.6 | Jan 24, 2025 | Hipped roof Z positioning fix (no more floating), house-scale thresholds +20% |
 | 0.3.7 | Jan 25, 2025 | Hipped roof walls use continuous quads (no floor splits) |
+| 0.4.0 | Jan 27, 2025 | Blender addon integration - import buildings directly into Blender |
+| 0.5.0 | Jan 27, 2025 | Condor workflow support - auto-detect landscapes, download OSM from Overpass, batch patch processing |
 
 ### Changelog Files
 
