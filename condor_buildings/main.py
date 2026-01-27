@@ -88,6 +88,35 @@ class PipelineReport:
     config_used: Dict[str, any] = field(default_factory=dict)
 
 
+@dataclass
+class PipelineResult:
+    """
+    Complete result of pipeline execution.
+
+    Supports two output modes:
+    - 'file': Writes OBJ files to disk (CLI mode)
+    - 'memory': Returns mesh data in memory (Blender mode)
+
+    Attributes:
+        success: Whether pipeline completed without errors
+        report: Detailed statistics and metadata
+        lod0_path: Path to LOD0 OBJ file (file mode only)
+        lod1_path: Path to LOD1 OBJ file (file mode only)
+        lod0_meshes: List of LOD0 MeshData (memory mode only)
+        lod1_meshes: List of LOD1 MeshData (memory mode only)
+    """
+    success: bool
+    report: PipelineReport
+
+    # File mode outputs
+    lod0_path: Optional[str] = None
+    lod1_path: Optional[str] = None
+
+    # Memory mode outputs (for Blender integration)
+    lod0_meshes: Optional[List] = None  # List[MeshData]
+    lod1_meshes: Optional[List] = None  # List[MeshData]
+
+
 def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
     """
     Configure logging to console and optionally to file.
@@ -129,7 +158,10 @@ def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None
         root_logger.addHandler(file_handler)
 
 
-def run_pipeline(config: PipelineConfig) -> PipelineReport:
+def run_pipeline(
+    config: PipelineConfig,
+    output_mode: str = "file"
+) -> PipelineResult:
     """
     Run the complete building generation pipeline.
 
@@ -143,14 +175,15 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
        a. Compute floor Z
        b. Select roof type
        c. Generate LOD0 and LOD1 meshes
-    7. Export OBJ files
+    7. Export OBJ files (file mode) or return meshes (memory mode)
     8. Generate report
 
     Args:
         config: Pipeline configuration
+        output_mode: "file" to write OBJ files (default), "memory" to return meshes
 
     Returns:
-        PipelineReport with results
+        PipelineResult with report and either file paths or mesh data
     """
     logger = logging.getLogger(__name__)
 
@@ -186,7 +219,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
 
     except Exception as e:
         errors.append(f"Failed to load patch metadata: {e}")
-        return PipelineReport(
+        error_report = PipelineReport(
             patch_id=config.patch_id,
             version=__version__,
             success=False,
@@ -194,6 +227,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
             output_files=[],
             errors=errors,
         )
+        return PipelineResult(success=False, report=error_report)
 
     # Step 2: Create projector
     logger.info("Creating coordinate projector")
@@ -215,7 +249,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
         logger.info(f"Loaded terrain with {stats.terrain_triangles} triangles")
     except Exception as e:
         errors.append(f"Failed to load terrain: {e}")
-        return PipelineReport(
+        error_report = PipelineReport(
             patch_id=config.patch_id,
             version=__version__,
             success=False,
@@ -223,6 +257,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
             output_files=[],
             errors=errors,
         )
+        return PipelineResult(success=False, report=error_report)
 
     # Step 4: Build spatial index
     logger.info("Building spatial index")
@@ -232,31 +267,36 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
     # Step 5: Parse OSM buildings
     logger.info("Parsing OSM buildings")
     try:
-        # Try multiple naming conventions for OSM file
-        osm_candidates = [
-            os.path.join(config.patch_dir, f"map_{config.patch_id[-2:]}.osm"),
-            os.path.join(config.patch_dir, f"map_{int(config.patch_id[-2:])}.osm"),
-            os.path.join(config.patch_dir, f"map_{config.patch_id}.osm"),
-        ]
+        # Check if explicit OSM path is provided (e.g., from Blender addon)
+        if config.osm_path and os.path.exists(config.osm_path):
+            osm_path = config.osm_path
+            logger.info(f"Using explicit OSM path: {osm_path}")
+        else:
+            # Try multiple naming conventions for OSM file
+            osm_candidates = [
+                os.path.join(config.patch_dir, f"map_{config.patch_id[-2:]}.osm"),
+                os.path.join(config.patch_dir, f"map_{int(config.patch_id[-2:])}.osm"),
+                os.path.join(config.patch_dir, f"map_{config.patch_id}.osm"),
+            ]
 
-        # Find the first existing OSM file
-        osm_path = None
-        for candidate in osm_candidates:
-            if os.path.exists(candidate):
-                osm_path = candidate
-                break
+            # Find the first existing OSM file
+            osm_path = None
+            for candidate in osm_candidates:
+                if os.path.exists(candidate):
+                    osm_path = candidate
+                    break
 
-        if osm_path is None:
-            # Search for any .osm file in directory
-            import glob
-            osm_files = glob.glob(os.path.join(config.patch_dir, "*.osm"))
-            if osm_files:
-                osm_path = osm_files[0]
-                logger.info(f"Using found OSM file: {osm_path}")
-            else:
-                raise FileNotFoundError(
-                    f"No OSM file found in {config.patch_dir}"
-                )
+            if osm_path is None:
+                # Search for any .osm file in directory
+                import glob
+                osm_files = glob.glob(os.path.join(config.patch_dir, "*.osm"))
+                if osm_files:
+                    osm_path = osm_files[0]
+                    logger.info(f"Using found OSM file: {osm_path}")
+                else:
+                    raise FileNotFoundError(
+                        f"No OSM file found in {config.patch_dir}"
+                    )
 
         parse_result = parse_osm_file(osm_path, projector, config.global_seed)
         buildings = parse_result.buildings
@@ -267,7 +307,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
 
     except Exception as e:
         errors.append(f"Failed to parse OSM: {e}")
-        return PipelineReport(
+        error_report = PipelineReport(
             patch_id=config.patch_id,
             version=__version__,
             success=False,
@@ -275,6 +315,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
             output_files=[],
             errors=errors,
         )
+        return PipelineResult(success=False, report=error_report)
 
     # Step 5b: Filter buildings outside patch bounds
     logger.info("Filtering buildings outside patch bounds")
@@ -300,7 +341,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
         buildings = [b for b in buildings if b.osm_id == config.debug_osm_id]
         if not buildings:
             errors.append(f"Debug building {config.debug_osm_id} not found in patch")
-            return PipelineReport(
+            error_report = PipelineReport(
                 patch_id=config.patch_id,
                 version=__version__,
                 success=False,
@@ -308,6 +349,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
                 output_files=[],
                 errors=errors,
             )
+            return PipelineResult(success=False, report=error_report)
 
     # Step 6: Process buildings
     logger.info("Processing buildings")
@@ -432,64 +474,72 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
         f"skipped {stats.buildings_skipped}"
     )
 
-    # Step 7: Export OBJ files
-    logger.info("Exporting OBJ files")
+    # Count mesh totals (needed for both modes)
+    for mesh in lod0_meshes:
+        stats.lod0_vertices += len(mesh.vertices)
+        stats.lod0_faces += len(mesh.faces)
+    for mesh in lod1_meshes:
+        stats.lod1_vertices += len(mesh.vertices)
+        stats.lod1_faces += len(mesh.faces)
 
-    # LOD0
-    try:
-        lod0_path = export_obj_lod0(
-            lod0_meshes,
-            config.patch_id,
-            config.output_dir,
-            use_groups=config.export_groups
-        )
-        output_files.append(lod0_path)
+    # Step 7: Export (depends on output_mode)
+    result_lod0_path = None
+    result_lod1_path = None
 
-        # Validate
-        lod0_errors = validate_obj_file(lod0_path)
-        if lod0_errors:
-            stats.warnings.extend([f"LOD0: {e}" for e in lod0_errors])
+    if output_mode == "file":
+        logger.info("Exporting OBJ files")
 
-        # Count totals
-        for mesh in lod0_meshes:
-            stats.lod0_vertices += len(mesh.vertices)
-            stats.lod0_faces += len(mesh.faces)
+        # LOD0
+        try:
+            result_lod0_path = export_obj_lod0(
+                lod0_meshes,
+                config.patch_id,
+                config.output_dir,
+                use_groups=config.export_groups
+            )
+            output_files.append(result_lod0_path)
 
+            # Validate
+            lod0_errors = validate_obj_file(result_lod0_path)
+            if lod0_errors:
+                stats.warnings.extend([f"LOD0: {e}" for e in lod0_errors])
+
+            logger.info(
+                f"Exported LOD0: {stats.lod0_vertices} vertices, "
+                f"{stats.lod0_faces} faces"
+            )
+
+        except Exception as e:
+            errors.append(f"Failed to export LOD0: {e}")
+
+        # LOD1
+        try:
+            result_lod1_path = export_obj_lod1(
+                lod1_meshes,
+                config.patch_id,
+                config.output_dir,
+                use_groups=config.export_groups
+            )
+            output_files.append(result_lod1_path)
+
+            # Validate
+            lod1_errors = validate_obj_file(result_lod1_path)
+            if lod1_errors:
+                stats.warnings.extend([f"LOD1: {e}" for e in lod1_errors])
+
+            logger.info(
+                f"Exported LOD1: {stats.lod1_vertices} vertices, "
+                f"{stats.lod1_faces} faces"
+            )
+
+        except Exception as e:
+            errors.append(f"Failed to export LOD1: {e}")
+    else:
+        # Memory mode - meshes will be returned in PipelineResult
         logger.info(
-            f"Exported LOD0: {stats.lod0_vertices} vertices, "
-            f"{stats.lod0_faces} faces"
+            f"Memory mode: {stats.lod0_vertices} LOD0 vertices, "
+            f"{stats.lod1_vertices} LOD1 vertices"
         )
-
-    except Exception as e:
-        errors.append(f"Failed to export LOD0: {e}")
-
-    # LOD1
-    try:
-        lod1_path = export_obj_lod1(
-            lod1_meshes,
-            config.patch_id,
-            config.output_dir,
-            use_groups=config.export_groups
-        )
-        output_files.append(lod1_path)
-
-        # Validate
-        lod1_errors = validate_obj_file(lod1_path)
-        if lod1_errors:
-            stats.warnings.extend([f"LOD1: {e}" for e in lod1_errors])
-
-        # Count totals
-        for mesh in lod1_meshes:
-            stats.lod1_vertices += len(mesh.vertices)
-            stats.lod1_faces += len(mesh.faces)
-
-        logger.info(
-            f"Exported LOD1: {stats.lod1_vertices} vertices, "
-            f"{stats.lod1_faces} faces"
-        )
-
-    except Exception as e:
-        errors.append(f"Failed to export LOD1: {e}")
 
     # Step 8: Generate report
     elapsed_ms = int((time.time() - start_time) * 1000)
@@ -523,19 +573,34 @@ def run_pipeline(config: PipelineConfig) -> PipelineReport:
         config_used=config_used,
     )
 
-    # Save report JSON
-    report_path = os.path.join(
-        config.output_dir,
-        f"o{config.patch_id}_report.json"
-    )
-    with open(report_path, 'w', encoding='utf-8') as f:
-        json.dump(asdict(report), f, indent=2)
-    output_files.append(report_path)
+    # Save report JSON (only in file mode)
+    if output_mode == "file":
+        report_path = os.path.join(
+            config.output_dir,
+            f"o{config.patch_id}_report.json"
+        )
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(asdict(report), f, indent=2)
+        output_files.append(report_path)
+        logger.info(f"Report saved to {report_path}")
 
     logger.info(f"Pipeline completed in {elapsed_ms}ms")
-    logger.info(f"Report saved to {report_path}")
 
-    return report
+    # Build result based on output mode
+    if output_mode == "file":
+        return PipelineResult(
+            success=report.success,
+            report=report,
+            lod0_path=result_lod0_path,
+            lod1_path=result_lod1_path,
+        )
+    else:
+        return PipelineResult(
+            success=report.success,
+            report=report,
+            lod0_meshes=lod0_meshes,
+            lod1_meshes=lod1_meshes,
+        )
 
 
 def main():
@@ -722,9 +787,10 @@ def main():
     )
 
     try:
-        report = run_pipeline(config)
+        result = run_pipeline(config, output_mode="file")
+        report = result.report
 
-        if report.success:
+        if result.success:
             print(f"\nSuccess! Generated {report.stats.buildings_processed} buildings")
             print(f"Parsed: {report.stats.buildings_parsed}, Filtered (edge): {report.stats.buildings_filtered_edge}")
             print(f"LOD0: {report.stats.lod0_vertices} vertices, {report.stats.lod0_faces} faces")

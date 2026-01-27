@@ -294,6 +294,10 @@ class PipelineConfig:
     # - osm_tags_only: Only buildings tagged as houses get pitched roofs
     roof_selection_mode: RoofSelectionMode = RoofSelectionMode.GEOMETRY
 
+    # Optional: explicit path to OSM file (overrides auto-detection)
+    # Used by Blender addon for downloaded OSM files
+    osm_path: Optional[str] = None
+
     def __post_init__(self):
         """Validate configuration values."""
         if self.floor_z_epsilon < 0:
