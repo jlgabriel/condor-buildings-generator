@@ -4,6 +4,8 @@
 
 This is a Python pipeline that generates 3D building meshes from OpenStreetMap (OSM) data for Condor 3 flight simulator. It produces OBJ files with UV coordinates for texture mapping.
 
+**Available as:** CLI tool + Blender addon (v0.5.0+)
+
 ## How to Run the Pipeline
 
 ```bash
@@ -32,6 +34,19 @@ test_data/
 └── map_21.osm       # OSM building data
 ```
 
+## Fake Condor Structure (for testing Blender addon without Condor3)
+
+```
+fake_condor/
+└── Landscapes/
+    └── TestLandscape/
+        └── Working/
+            ├── Heightmaps/
+            │   ├── h036019.txt
+            │   └── h036019.obj
+            └── Autogen/  (output folder)
+```
+
 ## Output Files
 
 ```
@@ -58,17 +73,25 @@ output/
 
 ```
 condor_buildings/
+├── __init__.py          # Package version + Blender addon registration
 ├── main.py              # CLI entry point - START HERE
-├── config.py            # All configuration constants
+├── config.py            # All configuration constants + PipelineConfig
 ├── models/              # Data models (BuildingRecord, MeshData, etc.)
 ├── io/                  # File I/O (OSM parser, OBJ exporter)
 ├── processing/          # Footprint analysis, floor Z solver
-└── generators/          # Mesh generation (walls, roofs, UV mapping)
-    ├── walls.py
-    ├── roof_gabled.py
-    ├── roof_hipped.py
-    ├── roof_flat.py
-    └── uv_mapping.py
+├── generators/          # Mesh generation (walls, roofs, UV mapping)
+│   ├── walls.py
+│   ├── roof_gabled.py
+│   ├── roof_hipped.py
+│   ├── roof_flat.py
+│   └── uv_mapping.py
+└── blender/             # Blender addon (v0.5.0+)
+    ├── __init__.py      # Addon initialization
+    ├── properties.py    # UI properties (Condor path, landscape, patch range)
+    ├── operators.py     # Import/clear operators with Condor workflow
+    ├── panels.py        # UI panels (sidebar)
+    ├── mesh_converter.py # MeshData → Blender mesh conversion
+    └── osm_downloader.py # Download OSM data from Overpass API
 ```
 
 ## Documentation
@@ -76,6 +99,59 @@ condor_buildings/
 - `docs/TECHNICAL_DOCUMENTATION.md` - Complete technical reference
 - `docs/CHANGELOG_*.md` - Detailed changelogs for each version
 
+## Blender Addon Usage (v0.5.0+)
+
+The addon supports the real Condor folder structure:
+
+1. **Condor Directory**: Path to Condor3 installation (e.g., `C:\Condor3`)
+2. **Landscape**: Auto-detected from `Landscapes/` folder
+3. **Patch Range**: X/Y min/max for batch processing, or single patch mode
+4. **OSM Source**: Download from Overpass API or use local file
+5. **Output**: Save to `Working/Autogen/` and/or import to Blender
+
+### Programmatic Usage
+
+```python
+from condor_buildings.main import run_pipeline
+from condor_buildings.config import PipelineConfig
+
+config = PipelineConfig(
+    patch_id="036019",
+    patch_dir="/path/to/heightmaps",
+    zone_number=0,  # Auto-loaded from h*.txt
+    translate_x=0.0,
+    translate_y=0.0,
+    osm_path="/path/to/downloaded.osm",  # Optional: explicit OSM path
+)
+
+# Memory mode returns meshes directly (for Blender)
+result = run_pipeline(config, output_mode="memory")
+# result.lod0_meshes, result.lod1_meshes contain MeshData objects
+```
+
+### OSM Downloader
+
+```python
+from condor_buildings.blender.osm_downloader import download_osm_for_patch
+from condor_buildings.io.patch_metadata import load_patch_metadata
+
+metadata = load_patch_metadata("h036019.txt")
+result = download_osm_for_patch(metadata, output_dir="./", filename_prefix="map")
+# result.filepath contains path to downloaded .osm file
+```
+
+## Creating ZIP for Blender Installation
+
+```bash
+# From project root
+powershell -Command "Compress-Archive -Path 'condor_buildings' -DestinationPath 'condor_buildings_v0.5.0.zip' -Force"
+```
+
 ## Current Version
 
-v0.3.7 - Phase 2 complete (UV mapping + texture atlas + hipped roofs with continuous wall quads)
+v0.5.0 - Condor workflow support:
+- Auto-detect landscapes from Condor folder structure
+- Download OSM data on-the-fly from Overpass API
+- Batch patch processing (X/Y range)
+- Save output to Working/Autogen folder
+- Import meshes directly into Blender viewport
