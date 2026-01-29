@@ -1,9 +1,9 @@
 # Condor Buildings Generator
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![Blender](https://img.shields.io/badge/blender-4.0+-orange.svg)](https://www.blender.org/)
-[![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
 A Python pipeline that generates 3D building meshes from OpenStreetMap (OSM) data for use in the **Condor 3** flight simulator. The pipeline produces OBJ files with UV coordinates compatible with Condor's terrain system.
 
@@ -28,9 +28,9 @@ python -m condor_buildings.main \
   --verbose
 ```
 
-### Option 2: Blender Addon (v0.5.0+)
+### Option 2: Blender Addon (v0.6.0+)
 
-1. Download `condor_buildings_v0.5.0.zip` from releases
+1. Download `condor_buildings_v0.6.0.zip` from releases
 2. In Blender: Edit > Preferences > Add-ons > Install
 3. Select the ZIP file
 4. Enable "Condor Buildings Generator" addon
@@ -40,6 +40,10 @@ python -m condor_buildings.main \
 8. Select a landscape from the dropdown
 9. Set patch range (X/Y min/max) or enable single patch mode
 10. Click "Generate Buildings"
+
+**New in v0.6.0:**
+- **Polyskel hipped roofs**: Buildings with 5-12 vertices now get proper hipped roofs (using bpypolyskel straight skeleton algorithm)
+- L-shaped, T-shaped, and U-shaped houses now have realistic roofs instead of flat
 
 **New in v0.5.0:**
 - Auto-detects landscapes from Condor folder structure
@@ -71,7 +75,7 @@ Place these files in your `--patch-dir`:
 
 ## Features
 
-- **Multiple roof types**: Gabled, hipped, and flat roofs
+- **Multiple roof types**: Gabled, hipped (including polyskel for complex shapes), and flat roofs
 - **OSM multipolygon support**: Buildings with holes/courtyards
 - **Terrain integration**: Floor Z computed from terrain mesh intersection
 - **UV mapping**: Full texture atlas support (6 roof patterns, 12 facade styles)
@@ -124,6 +128,7 @@ The Condor Buildings Generator is a standalone Python pipeline that generates 3D
 - Classifies buildings by type (house, apartment, industrial, commercial)
 - Generates gabled roofs using OBB-based approach for stability
 - Generates hipped roofs using BLOSM's analytical solution for quadrilaterals
+- Generates hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton (Blender only)
 - Computes floor Z from terrain mesh intersection
 - Exports OBJ with per-building groups and UV coordinates
 - Texture atlas support with 6 roof patterns and 12 facade styles
@@ -165,12 +170,17 @@ condor_buildings/
 │   ├── spatial_index.py     # Grid-based spatial index for terrain
 │   ├── floor_z_solver.py    # Floor Z computation from terrain
 │   └── patch_filter.py      # Filter buildings outside patch bounds
+├── bpypolyskel/             # Embedded straight skeleton library (GPL v3)
+│   ├── bpypolyskel.py       # Main algorithm
+│   ├── bpyeuclid.py         # 2D geometry primitives
+│   └── poly2FacesGraph.py   # Skeleton to faces conversion
 ├── generators/
 │   ├── building_generator.py  # Orchestrator for walls + roof
 │   ├── walls.py             # Wall mesh generation
 │   ├── roof_flat.py         # Flat roof generation
 │   ├── roof_gabled.py       # Gabled roof generation (OBB-based)
-│   ├── roof_hipped.py       # Hipped roof generation (BLOSM analytical)
+│   ├── roof_hipped.py       # Hipped roof generation (BLOSM analytical, 4 verts)
+│   ├── roof_polyskel.py     # Hipped roof generation (straight skeleton, >4 verts)
 │   └── uv_mapping.py        # UV coordinate generation for texture atlas
 └── utils/
     ├── math_utils.py        # Mathematical utilities
@@ -635,9 +645,13 @@ def _duplicate_faces_reversed(mesh, start_idx, end_idx):
 
 For flat roofs, the footprint is triangulated directly at `wall_top_z` using ear-clipping triangulation. UV coordinates use world-space XY scaled to 3m = 1.0 UV unit.
 
-### Hipped Roof (v0.3.4+, Z fix v0.3.6)
+### Hipped Roof (v0.3.4+, Z fix v0.3.6, polyskel v0.6.0)
 
-Hipped roofs use BLOSM's analytical solution for quadrilateral buildings:
+Hipped roofs are generated using two different algorithms depending on vertex count:
+
+#### Analytical Hipped (4 vertices)
+
+For quadrilateral buildings, uses BLOSM's analytical solution:
 
 **Algorithm:**
 1. Compute edge geometry (vectors, lengths, angles) on ORIGINAL footprint
@@ -645,7 +659,26 @@ Hipped roofs use BLOSM's analytical solution for quadrilateral buildings:
 3. Find ridge endpoints from minimum distance edges
 4. Create 4 roof faces: 2 triangular hips + 2 trapezoidal sides
 
-**Configuration:**
+**Special case:** Square footprints generate pyramidal roofs (single apex point).
+
+#### Polyskel Hipped (5-12 vertices, Blender only)
+
+For buildings with more than 4 vertices (L-shaped, T-shaped, U-shaped), uses the bpypolyskel straight skeleton algorithm:
+
+**Algorithm:**
+1. Compute straight skeleton of footprint polygon
+2. Convert skeleton to roof faces with proper ridge lines and valleys
+3. Apply overhang by expanding footprint before skeletonization
+4. Adjust eave Z based on computed roof pitch
+
+**Eligibility for polyskel:**
+- Vertex count: 5-12 (configurable via `POLYSKEL_MAX_VERTICES`)
+- No holes in footprint
+- House-scale dimensions
+- Floor count ≤ 2
+- Running in Blender (requires mathutils)
+
+**Configuration (both algorithms):**
 - Fixed height: 3.0m (same as gabled)
 - Max floors: 2 (same as gabled)
 - Selection: Via OSM tag `roof:shape=hipped` or `--random-hipped` flag
@@ -660,8 +693,6 @@ eave_z = wall_top_z - tan_pitch * overhang  # Lower due to slope
 ```
 
 This ensures the roof "sits" correctly on the walls with no visible gap.
-
-**Special case:** Square footprints generate pyramidal roofs (single apex point).
 
 ---
 
@@ -1292,6 +1323,7 @@ Condor 3D (x, y, z)
 | 0.3.7 | Jan 25, 2025 | Hipped roof walls use continuous quads (no floor splits) |
 | 0.4.0 | Jan 27, 2025 | Blender addon integration - import buildings directly into Blender |
 | 0.5.0 | Jan 27, 2025 | Condor workflow support - auto-detect landscapes, download OSM from Overpass, batch patch processing |
+| 0.6.0 | Jan 29, 2025 | Polyskel integration - hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton |
 
 ### Changelog Files
 
@@ -1301,7 +1333,9 @@ Detailed changelogs are available in the `docs/` directory.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU General Public License v3.0** (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
+
+**Note:** As of v0.6.0, the project includes the bpypolyskel library which is licensed under GPL v3. This requires the entire project to be distributed under GPL v3.
 
 ## Contributing
 
@@ -1311,6 +1345,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - OpenStreetMap contributors for building data
 - BLOSM project for roof generation algorithms
+- [bpypolyskel](https://github.com/prochitecture/bpypolyskel) for straight skeleton algorithm
 - Condor Soaring community
 
 ---

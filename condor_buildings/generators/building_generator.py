@@ -1,7 +1,7 @@
 """
 Building generator orchestrator for Condor Buildings Generator.
 
-Combines wall generation, roof generation (flat or gabled),
+Combines wall generation, roof generation (flat, gabled, hipped, polyskel),
 and handles roof type fallback logic.
 """
 
@@ -57,7 +57,20 @@ from ..config import (
     HIPPED_MAX_FLOORS,
     # Roof selection mode
     RoofSelectionMode,
+    # Polyskel constraints
+    POLYSKEL_MAX_VERTICES,
 )
+
+# Conditional import of polyskel roof generator
+# Available only in Blender (requires mathutils + bpypolyskel)
+try:
+    from .roof_polyskel import (
+        generate_polyskel_roof,
+        PolyskelRoofConfig,
+        POLYSKEL_AVAILABLE,
+    )
+except ImportError:
+    POLYSKEL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +306,7 @@ def _determine_roof_type(
     if requested_type == RoofType.FLAT:
         return RoofType.FLAT, None
 
-    # Hipped roof - check eligibility (same constraints as gabled)
+    # Hipped roof - check eligibility
     if requested_type == RoofType.HIPPED:
         # Check floor count restriction
         if building.floors > HIPPED_MAX_FLOORS:
@@ -301,7 +314,7 @@ def _determine_roof_type(
             building.roof_fallback_reason = RoofFallbackReason.TOO_MANY_FLOORS
             return RoofType.FLAT, None
 
-        # Analyze footprint (same constraints as gabled)
+        # Analyze footprint (with gabled constraints for analytical hipped)
         analysis = process_footprint(
             building.footprint,
             max_vertices=max_vertices,
@@ -313,12 +326,15 @@ def _determine_roof_type(
             house_max_aspect=house_max_aspect,
         )
         result.footprint_analysis = analysis
-        eligibility = analysis.gabled_eligible  # Same eligibility for hipped
+        eligibility = analysis.gabled_eligible
         building.footprint_vertex_count = analysis.vertex_count
 
         # Check eligibility and house-scale
         if eligibility == GabledEligibility.ELIGIBLE and analysis.is_house_scale:
-            # Will be hipped - no special params needed (computed in roof generator)
+            # ≤4 verts, convex, house-scale → analytical hipped
+            return RoofType.HIPPED, None
+        elif _is_polyskel_eligible(eligibility, analysis, building):
+            # >4 verts, no holes, house-scale, polyskel available → polyskel hipped
             return RoofType.HIPPED, None
         else:
             # Falls back to flat
@@ -362,6 +378,14 @@ def _determine_roof_type(
             obb_center = (obb['center_x'], obb['center_y'])
 
             return RoofType.GABLED, (ridge_direction, ridge_z, obb_center)
+        elif _is_polyskel_eligible(eligibility, analysis, building):
+            # GABLED ineligible due to >4 verts → fallback to polyskel hipped
+            # Better a hipped roof than a flat one for a house
+            logger.debug(
+                f"Building {building.osm_id}: GABLED→HIPPED(polyskel) fallback "
+                f"[{analysis.vertex_count} verts]"
+            )
+            return RoofType.HIPPED, None
         else:
             # Will fall back to flat
             return RoofType.FLAT, None
@@ -410,7 +434,7 @@ def _generate_roof(
         result.fallback_reason = RoofFallbackReason.NONE
         return generate_flat_roof(building), RoofType.FLAT
 
-    # Hipped roof - check eligibility (same constraints as gabled for quadrilaterals)
+    # Hipped roof - check eligibility
     if requested_type == RoofType.HIPPED:
         # Check floor count restriction
         if building.floors > HIPPED_MAX_FLOORS:
@@ -422,7 +446,7 @@ def _generate_roof(
             )
             return generate_flat_roof(building), RoofType.FLAT
 
-        # Analyze footprint (same constraints as gabled)
+        # Analyze footprint (with gabled constraints for analytical hipped)
         analysis = process_footprint(
             building.footprint,
             max_vertices=max_vertices,
@@ -434,18 +458,23 @@ def _generate_roof(
             house_max_aspect=house_max_aspect,
         )
         result.footprint_analysis = analysis
-        eligibility = analysis.gabled_eligible  # Same eligibility for hipped
+        eligibility = analysis.gabled_eligible
         building.footprint_vertex_count = analysis.vertex_count
 
         # Check eligibility and house-scale
         if eligibility == GabledEligibility.ELIGIBLE and analysis.is_house_scale:
-            # Generate hipped roof
+            # ≤4 verts, convex, house-scale → analytical hipped roof
             config = HippedRoofConfig(
                 overhang=overhang,
                 double_sided_roof=True
             )
             result.fallback_reason = RoofFallbackReason.NONE
             return generate_hipped_roof(building, config), RoofType.HIPPED
+        elif _is_polyskel_eligible(eligibility, analysis, building):
+            # >4 verts, no holes, house-scale → polyskel hipped roof
+            return _generate_polyskel_roof_with_fallback(
+                building, overhang, result, analysis
+            )
         else:
             # Fallback to flat
             fallback_reason = RoofFallbackReason.from_eligibility(eligibility.value)
@@ -518,6 +547,16 @@ def _generate_roof(
                 )
 
                 return generate_flat_roof(building), RoofType.FLAT
+        elif _is_polyskel_eligible(eligibility, analysis, building):
+            # GABLED ineligible (>4 verts) → fallback to polyskel hipped
+            # Better a hipped roof than a flat one for a house
+            logger.debug(
+                f"Building {building.osm_id}: GABLED→HIPPED(polyskel) fallback "
+                f"[{analysis.vertex_count} verts]"
+            )
+            return _generate_polyskel_roof_with_fallback(
+                building, overhang, result, analysis
+            )
         else:
             # Fallback to flat with detailed reason (gabled eligibility failed)
             fallback_reason = RoofFallbackReason.from_eligibility(eligibility.value)
@@ -539,6 +578,111 @@ def _generate_roof(
     # Default to flat
     result.fallback_reason = RoofFallbackReason.NONE
     return generate_flat_roof(building), RoofType.FLAT
+
+
+def _is_polyskel_eligible(
+    eligibility: GabledEligibility,
+    analysis: FootprintAnalysis,
+    building: BuildingRecord
+) -> bool:
+    """
+    Check if a building is eligible for polyskel hipped roof generation.
+
+    A building qualifies if ALL conditions are met:
+    1. bpypolyskel is available (Blender environment)
+    2. Ineligible for analytical roof due to TOO_MANY_VERTICES
+    3. Vertex count is within polyskel limits
+    4. No holes in footprint
+    5. House-scale dimensions
+    6. Floor count within hipped limits
+
+    Args:
+        eligibility: Result from gabled eligibility check
+        analysis: Footprint analysis results
+        building: Building record
+
+    Returns:
+        True if building should use polyskel roof generator
+    """
+    if not POLYSKEL_AVAILABLE:
+        return False
+
+    # Only intercept buildings that failed due to vertex count
+    if eligibility != GabledEligibility.TOO_MANY_VERTICES:
+        return False
+
+    # Check polyskel vertex limit
+    if analysis.vertex_count > POLYSKEL_MAX_VERTICES:
+        return False
+
+    # No holes (for now)
+    if building.footprint.has_holes:
+        return False
+
+    # Must be house-scale
+    if not analysis.is_house_scale:
+        return False
+
+    # Floor count check
+    if building.floors > HIPPED_MAX_FLOORS:
+        return False
+
+    return True
+
+
+def _generate_polyskel_roof_with_fallback(
+    building: BuildingRecord,
+    overhang: float,
+    result: BuildingGeneratorResult,
+    analysis: FootprintAnalysis
+) -> Tuple[MeshData, RoofType]:
+    """
+    Generate polyskel hipped roof with fallback to flat on failure.
+
+    If polygonize() fails for any reason, falls back to a flat roof
+    instead of crashing.
+
+    Args:
+        building: Building record
+        overhang: Roof overhang distance
+        result: Result object for collecting warnings
+        analysis: Footprint analysis (for logging)
+
+    Returns:
+        (roof_mesh, actual_roof_type)
+    """
+    polyskel_config = PolyskelRoofConfig(
+        overhang=overhang,
+        double_sided_roof=True
+    )
+
+    try:
+        roof_mesh = generate_polyskel_roof(building, polyskel_config)
+
+        # Check if polyskel actually produced geometry
+        if len(roof_mesh.faces) == 0:
+            logger.warning(
+                f"Building {building.osm_id}: polyskel produced no faces, "
+                f"falling back to flat [{analysis.vertex_count} verts]"
+            )
+            result.fallback_reason = RoofFallbackReason.POLYSKEL_FAILED
+            building.roof_fallback_reason = RoofFallbackReason.POLYSKEL_FAILED
+            result.warnings.append("Polyskel roof produced no faces, fallback to flat")
+            return generate_flat_roof(building), RoofType.FLAT
+
+        result.fallback_reason = RoofFallbackReason.NONE
+        return roof_mesh, RoofType.HIPPED
+
+    except Exception as e:
+        logger.warning(
+            f"Building {building.osm_id}: polyskel roof failed: {e}, "
+            f"falling back to flat [{analysis.vertex_count} verts]"
+        )
+        result.fallback_reason = RoofFallbackReason.POLYSKEL_FAILED
+        building.roof_fallback_reason = RoofFallbackReason.POLYSKEL_FAILED
+        result.warnings.append(f"Polyskel roof failed: {e}, fallback to flat")
+        building.warnings.append(f"Polyskel failed: {e}")
+        return generate_flat_roof(building), RoofType.FLAT
 
 
 def _eligibility_reason(

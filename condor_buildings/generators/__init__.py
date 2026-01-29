@@ -2,7 +2,8 @@
 Mesh generators for Condor Buildings Generator.
 
 Contains wall generator, flat roof generator, gabled roof generator,
-and the main building generator that orchestrates them all.
+polyskel hipped roof generator, and the main building generator
+that orchestrates them all.
 """
 
 from .walls import generate_walls, WallGeneratorConfig
@@ -14,6 +15,13 @@ from .building_generator import (
     generate_building_lod1,
     BuildingGeneratorResult,
 )
+
+# Conditional import of polyskel roof generator
+# Available only in Blender (requires mathutils + bpypolyskel)
+try:
+    from .roof_polyskel import generate_polyskel_roof, PolyskelRoofConfig, POLYSKEL_AVAILABLE
+except ImportError:
+    POLYSKEL_AVAILABLE = False
 
 __all__ = [
     'generate_walls',

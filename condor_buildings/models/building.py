@@ -141,6 +141,9 @@ class RoofFallbackReason(Enum):
     TOO_ELONGATED = "too_elongated"  # Aspect ratio > max for house
     # Floor-based reasons
     TOO_MANY_FLOORS = "too_many_floors"  # Building has more floors than allowed for roof type
+    # Polyskel-related reasons
+    POLYSKEL_FAILED = "polyskel_failed"  # polygonize() raised an exception
+    POLYSKEL_NOT_AVAILABLE = "polyskel_not_available"  # bpypolyskel not installed (standalone mode)
 
     @classmethod
     def from_eligibility(cls, eligibility_value: str) -> 'RoofFallbackReason':
@@ -160,6 +163,9 @@ class RoofFallbackReason(Enum):
             'too_long_side': cls.TOO_LONG_SIDE,
             'too_short_side': cls.TOO_SHORT_SIDE,
             'too_elongated': cls.TOO_ELONGATED,
+            # Polyskel mappings
+            'polyskel_failed': cls.POLYSKEL_FAILED,
+            'polyskel_not_available': cls.POLYSKEL_NOT_AVAILABLE,
         }
         return mapping.get(eligibility_value, cls.NONE)
 

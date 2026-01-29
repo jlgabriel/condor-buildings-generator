@@ -121,6 +121,20 @@ DEBUG_GABLED_ROOFS = False
 DEBUG_HIPPED_ROOFS = False
 
 # =============================================================================
+# POLYSKEL ROOF CONSTRAINTS (bpypolyskel-based hipped roofs for >4 vertices)
+# =============================================================================
+
+# Maximum vertex count for polyskel roof generation
+# Buildings with more vertices than this get flat roofs.
+# bpypolyskel handles any count, but very complex footprints
+# (churches, stadiums) shouldn't get residential-style roofs.
+# 12 vertices covers most L-shaped, T-shaped, and U-shaped houses.
+POLYSKEL_MAX_VERTICES = 12
+
+# Debug mode for polyskel roof generation
+DEBUG_POLYSKEL_ROOFS = False
+
+# =============================================================================
 # FLOOR RESTRICTIONS FOR ROOF TYPES
 # =============================================================================
 
