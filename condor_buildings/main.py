@@ -58,6 +58,11 @@ class PipelineStats:
     lod0_faces: int = 0
     lod1_vertices: int = 0
     lod1_faces: int = 0
+    # Optimization stats
+    lod0_vertices_before_optimize: int = 0
+    lod1_vertices_before_optimize: int = 0
+    lod0_vertices_removed: int = 0
+    lod1_vertices_removed: int = 0
     terrain_triangles: int = 0
     processing_time_ms: int = 0
     filtered_building_ids: List[str] = field(default_factory=list)
@@ -474,13 +479,45 @@ def run_pipeline(
         f"skipped {stats.buildings_skipped}"
     )
 
-    # Count mesh totals (needed for both modes)
+    # Step 6b: Optimize meshes (deduplicate vertices)
+    logger.info("Optimizing meshes (vertex deduplication)")
+
+    # Count vertices before optimization
+    for mesh in lod0_meshes:
+        stats.lod0_vertices_before_optimize += len(mesh.vertices)
+    for mesh in lod1_meshes:
+        stats.lod1_vertices_before_optimize += len(mesh.vertices)
+
+    # Optimize each mesh
+    for mesh in lod0_meshes:
+        opt_result = mesh.optimize(precision=4)
+        stats.lod0_vertices_removed += opt_result.vertices_removed
+
+    for mesh in lod1_meshes:
+        opt_result = mesh.optimize(precision=4)
+        stats.lod1_vertices_removed += opt_result.vertices_removed
+
+    # Count mesh totals after optimization
     for mesh in lod0_meshes:
         stats.lod0_vertices += len(mesh.vertices)
         stats.lod0_faces += len(mesh.faces)
     for mesh in lod1_meshes:
         stats.lod1_vertices += len(mesh.vertices)
         stats.lod1_faces += len(mesh.faces)
+
+    # Log optimization results
+    if stats.lod0_vertices_before_optimize > 0:
+        lod0_reduction = (stats.lod0_vertices_removed / stats.lod0_vertices_before_optimize) * 100
+        logger.info(
+            f"LOD0 optimization: {stats.lod0_vertices_before_optimize} -> {stats.lod0_vertices} vertices "
+            f"({stats.lod0_vertices_removed} removed, {lod0_reduction:.1f}% reduction)"
+        )
+    if stats.lod1_vertices_before_optimize > 0:
+        lod1_reduction = (stats.lod1_vertices_removed / stats.lod1_vertices_before_optimize) * 100
+        logger.info(
+            f"LOD1 optimization: {stats.lod1_vertices_before_optimize} -> {stats.lod1_vertices} vertices "
+            f"({stats.lod1_vertices_removed} removed, {lod1_reduction:.1f}% reduction)"
+        )
 
     # Step 7: Export (depends on output_mode)
     result_lod0_path = None

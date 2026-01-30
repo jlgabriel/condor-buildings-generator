@@ -300,6 +300,104 @@ class MeshData:
     def __repr__(self) -> str:
         return f"MeshData(vertices={len(self.vertices)}, faces={len(self.faces)})"
 
+    def optimize(self, precision: int = 4) -> 'OptimizeResult':
+        """
+        Optimize mesh by deduplicating vertices with identical coordinates.
+
+        This method finds vertices that have the same XYZ coordinates (within
+        floating-point precision) and merges them into single vertices. Face
+        indices are remapped accordingly.
+
+        UV coordinates are NOT deduplicated because the same vertex position
+        can have different UV coordinates on adjacent faces (e.g., at corners
+        where two walls meet with different textures).
+
+        The OBJ format supports separate indices for vertices and UVs
+        (f v1/vt1 v2/vt2 ...), so this optimization reduces vertex count
+        while preserving UV mapping.
+
+        Args:
+            precision: Number of decimal places for coordinate comparison.
+                       Default 4 means vertices within 0.0001 units are merged.
+
+        Returns:
+            OptimizeResult with statistics about the optimization.
+        """
+        if not self.vertices:
+            return OptimizeResult(
+                original_vertices=0,
+                optimized_vertices=0,
+                vertices_removed=0,
+                reduction_percent=0.0
+            )
+
+        original_count = len(self.vertices)
+
+        # Build mapping from rounded coordinates to unique vertex index
+        # Key: (rounded_x, rounded_y, rounded_z) -> new 1-based index
+        coord_to_index: dict = {}
+        unique_vertices: List[Tuple[float, float, float]] = []
+
+        # Map old index (1-based) to new index (1-based)
+        old_to_new: dict = {}
+
+        for old_idx_0based, vertex in enumerate(self.vertices):
+            old_idx = old_idx_0based + 1  # Convert to 1-based
+
+            # Round coordinates for comparison
+            key = (
+                round(vertex[0], precision),
+                round(vertex[1], precision),
+                round(vertex[2], precision)
+            )
+
+            if key in coord_to_index:
+                # Vertex already exists, reuse its index
+                old_to_new[old_idx] = coord_to_index[key]
+            else:
+                # New unique vertex
+                unique_vertices.append(vertex)
+                new_idx = len(unique_vertices)  # 1-based
+                coord_to_index[key] = new_idx
+                old_to_new[old_idx] = new_idx
+
+        # Remap face indices
+        new_faces: List[List[int]] = []
+        for face in self.faces:
+            new_face = [old_to_new[idx] for idx in face]
+            new_faces.append(new_face)
+
+        # Update mesh data
+        self.vertices = unique_vertices
+        self.faces = new_faces
+        # UVs and face_uvs remain unchanged
+
+        optimized_count = len(self.vertices)
+        removed = original_count - optimized_count
+        reduction = (removed / original_count * 100) if original_count > 0 else 0.0
+
+        return OptimizeResult(
+            original_vertices=original_count,
+            optimized_vertices=optimized_count,
+            vertices_removed=removed,
+            reduction_percent=reduction
+        )
+
+
+@dataclass
+class OptimizeResult:
+    """Result of mesh optimization."""
+    original_vertices: int
+    optimized_vertices: int
+    vertices_removed: int
+    reduction_percent: float
+
+    def __repr__(self) -> str:
+        return (
+            f"OptimizeResult(vertices: {self.original_vertices} -> {self.optimized_vertices}, "
+            f"removed: {self.vertices_removed} ({self.reduction_percent:.1f}%))"
+        )
+
 
 def create_empty_mesh(osm_id: Optional[str] = None) -> MeshData:
     """

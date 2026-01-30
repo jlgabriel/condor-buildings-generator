@@ -4,7 +4,7 @@
 
 This is a Python pipeline that generates 3D building meshes from OpenStreetMap (OSM) data for Condor 3 flight simulator. It produces OBJ files with UV coordinates for texture mapping.
 
-**Available as:** CLI tool + Blender addon (v0.6.1+)
+**Available as:** CLI tool + Blender addon (v0.6.2+)
 
 ## How to Run the Pipeline
 
@@ -144,7 +144,7 @@ result = download_osm_for_patch(metadata, output_dir="./", filename_prefix="map"
 
 ```bash
 # From project root
-powershell -Command "Compress-Archive -Path 'condor_buildings' -DestinationPath 'condor_buildings_v0.6.1.zip' -Force"
+powershell -Command "Compress-Archive -Path 'condor_buildings' -DestinationPath 'condor_buildings_v0.6.2.zip' -Force"
 ```
 
 ## Runtime Configuration (v0.6.1+)
@@ -166,13 +166,12 @@ configure_generator(
 
 ## Current Version
 
-v0.6.1 - Configurable parameters in Blender UI:
-- Gable height, roof overhang, floor Z offset adjustable in UI
-- Max floors for gabled/hipped roofs configurable
-- Min rectangularity and polyskel max vertices in Advanced panel
-- Random seed for reproducible results
-- Runtime configuration system (`configure_generator()`)
+v0.6.2 - Vertex optimization:
+- Automatic vertex deduplication (~63% reduction in vertex count)
+- Smaller OBJ files, faster loading in Blender/Condor
+- No configuration needed - runs automatically
 
 Previous versions:
+- v0.6.1: Configurable parameters in Blender UI (gable height, overhang, floor Z, max floors, etc.)
 - v0.6.0: Polyskel hipped roofs for 5-12 vertex buildings
 - v0.5.0: Condor workflow support (auto-detect landscapes, download OSM, batch processing)

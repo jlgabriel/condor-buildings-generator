@@ -1,6 +1,6 @@
 # Condor Buildings Generator
 
-[![Version](https://img.shields.io/badge/version-0.6.1-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
+[![Version](https://img.shields.io/badge/version-0.6.2-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![Blender](https://img.shields.io/badge/blender-4.0+-orange.svg)](https://www.blender.org/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
@@ -28,9 +28,9 @@ python -m condor_buildings.main \
   --verbose
 ```
 
-### Option 2: Blender Addon (v0.6.1+)
+### Option 2: Blender Addon (v0.6.2+)
 
-1. Download `condor_buildings_v0.6.1.zip` from releases
+1. Download `condor_buildings_v0.6.2.zip` from releases
 2. In Blender: Edit > Preferences > Add-ons > Install
 3. Select the ZIP file
 4. Enable "Condor Buildings Generator" addon
@@ -40,6 +40,10 @@ python -m condor_buildings.main \
 8. Select a landscape from the dropdown
 9. Set patch range (X/Y min/max) or enable single patch mode
 10. Click "Generate Buildings"
+
+**New in v0.6.2:**
+- **Automatic vertex optimization**: Mesh vertex deduplication reduces file size by ~63% with no configuration required
+- Smaller OBJ files load faster in Blender and Condor
 
 **New in v0.6.1:**
 - **Configurable parameters in UI**: Gable height, roof overhang, floor Z offset, max floors, rectangularity, polyskel vertices, and random seed can now be adjusted directly in Blender
@@ -1248,7 +1252,7 @@ Extend building base below terrain level to prevent visual gaps on sloped terrai
 
 #### 4. Geometry Optimization
 
-- Vertex deduplication (currently creates duplicate vertices)
+- ~~Vertex deduplication~~ ✓ (v0.6.2 - automatic, ~63% reduction)
 - Mesh simplification for LOD1
 - Normal generation for smooth shading
 
@@ -1329,6 +1333,7 @@ Condor 3D (x, y, z)
 | 0.5.0 | Jan 27, 2025 | Condor workflow support - auto-detect landscapes, download OSM from Overpass, batch patch processing |
 | 0.6.0 | Jan 29, 2025 | Polyskel integration - hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton |
 | 0.6.1 | Jan 30, 2025 | Configurable parameters - expose all key parameters in Blender UI (gable height, overhang, floor Z, max floors, rectangularity, polyskel vertices, seed) |
+| 0.6.2 | Jan 30, 2025 | Vertex optimization - automatic deduplication reduces mesh size by ~63% |
 
 ### Changelog Files
 
