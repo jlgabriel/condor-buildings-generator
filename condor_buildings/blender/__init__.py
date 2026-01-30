@@ -17,7 +17,7 @@ Usage:
 bl_info = {
     "name": "Condor Buildings Generator",
     "author": "Condor Buildings Team (Wiek Schoenmakers, Juan Luis Gabriel, Claude)",
-    "version": (0, 4, 0),
+    "version": (0, 6, 1),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Condor",
     "description": "Generate 3D buildings from OSM data for Condor 3 flight simulator",

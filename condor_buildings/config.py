@@ -289,6 +289,12 @@ class PipelineConfig:
     house_min_side_length: float = HOUSE_MIN_SIDE_LENGTH
     house_max_aspect_ratio: float = HOUSE_MAX_ASPECT_RATIO
 
+    # Roof geometry (new configurable parameters)
+    gable_height: float = GABLE_HEIGHT_FIXED
+    gabled_max_floors: int = GABLED_MAX_FLOORS
+    hipped_max_floors: int = HIPPED_MAX_FLOORS
+    polyskel_max_vertices: int = POLYSKEL_MAX_VERTICES
+
     # Export
     export_groups: bool = OBJ_EXPORT_GROUPS
     output_dir: str = "./output"

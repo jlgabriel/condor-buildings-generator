@@ -118,6 +118,7 @@ class CONDOR_OT_import_buildings(Operator):
             from ..main import run_pipeline
             from ..config import PipelineConfig, RoofSelectionMode
             from ..io.patch_metadata import load_patch_metadata
+            from ..generators import configure_generator
             from .mesh_converter import import_meshes_to_blender, cleanup_buildings_collection
             from .osm_downloader import download_osm_for_patch
         except ImportError as e:
@@ -143,6 +144,22 @@ class CONDOR_OT_import_buildings(Operator):
         roof_mode = RoofSelectionMode.GEOMETRY
         if props.roof_selection_mode == 'OSM_TAGS_ONLY':
             roof_mode = RoofSelectionMode.OSM_TAGS_ONLY
+
+        # Configure generator with UI parameters
+        configure_generator(
+            gable_height=props.gable_height,
+            hipped_height=props.gable_height,  # Same as gable for consistency
+            roof_overhang_lod0=props.roof_overhang,
+            floor_z_epsilon=props.floor_z_epsilon,
+            gabled_max_floors=props.gabled_max_floors,
+            hipped_max_floors=props.gabled_max_floors,  # Same as gabled
+            gabled_min_rectangularity=props.gabled_min_rectangularity,
+            polyskel_max_vertices=props.polyskel_max_vertices,
+            house_max_area=props.house_max_area,
+            house_max_side=props.house_max_side,
+            house_min_side=props.house_min_side,
+            house_max_aspect=props.house_max_aspect,
+        )
 
         # Process patches
         start_time = time.time()
@@ -215,17 +232,26 @@ class CONDOR_OT_import_buildings(Operator):
                     zone_number=metadata.zone_number,
                     translate_x=metadata.translate_x,
                     translate_y=metadata.translate_y,
-                    global_seed=42,
+                    global_seed=props.global_seed,
                     export_groups=True,
                     output_dir=paths['autogen'] if props.save_to_autogen else "",
                     verbose=False,
                     roof_selection_mode=roof_mode,
                     random_hipped=props.random_hipped,
                     debug_osm_id=props.debug_osm_id if props.debug_osm_id else None,
+                    # House-scale constraints
                     house_max_footprint_area=props.house_max_area,
                     house_max_side_length=props.house_max_side,
                     house_min_side_length=props.house_min_side,
                     house_max_aspect_ratio=props.house_max_aspect,
+                    # Roof geometry parameters
+                    gable_height=props.gable_height,
+                    roof_overhang_lod0=props.roof_overhang,
+                    floor_z_epsilon=props.floor_z_epsilon,
+                    gabled_max_floors=props.gabled_max_floors,
+                    # Advanced geometry constraints
+                    gabled_min_rectangularity=props.gabled_min_rectangularity,
+                    polyskel_max_vertices=props.polyskel_max_vertices,
                 )
 
                 # Override OSM path in config

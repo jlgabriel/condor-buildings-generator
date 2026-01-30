@@ -224,6 +224,78 @@ class CondorBuildingsProperties(PropertyGroup):
         soft_max=6.0,
     )
 
+    # --- Roof Geometry Parameters ---
+
+    gable_height: FloatProperty(
+        name="Gable Height",
+        description="Fixed height of gable/hipped roof peak above walls (meters)",
+        default=3.0,
+        min=1.0,
+        max=10.0,
+        soft_min=2.0,
+        soft_max=5.0,
+        unit='LENGTH',
+    )
+
+    roof_overhang: FloatProperty(
+        name="Roof Overhang",
+        description="Roof overhang distance beyond walls for LOD0 (meters)",
+        default=0.5,
+        min=0.0,
+        max=2.0,
+        soft_min=0.0,
+        soft_max=1.0,
+        unit='LENGTH',
+    )
+
+    floor_z_epsilon: FloatProperty(
+        name="Floor Z Offset",
+        description="Distance to sink buildings below terrain to avoid gaps (meters)",
+        default=0.3,
+        min=0.0,
+        max=2.0,
+        soft_min=0.1,
+        soft_max=1.0,
+        unit='LENGTH',
+    )
+
+    gabled_max_floors: IntProperty(
+        name="Max Floors (Gabled)",
+        description="Maximum number of floors for gabled/hipped roof eligibility",
+        default=2,
+        min=1,
+        max=10,
+    )
+
+    # --- Advanced Geometry Constraints ---
+
+    gabled_min_rectangularity: FloatProperty(
+        name="Min Rectangularity",
+        description="Minimum area/OBB ratio for gabled roof eligibility (0.0-1.0)",
+        default=0.70,
+        min=0.5,
+        max=1.0,
+        soft_min=0.6,
+        soft_max=0.9,
+    )
+
+    polyskel_max_vertices: IntProperty(
+        name="Max Vertices (Polyskel)",
+        description="Maximum footprint vertices for polyskel hipped roofs (complex shapes)",
+        default=12,
+        min=5,
+        max=20,
+    )
+
+    # --- Reproducibility ---
+
+    global_seed: IntProperty(
+        name="Random Seed",
+        description="Seed for deterministic texture/style variation (same seed = same results)",
+        default=42,
+        min=0,
+    )
+
     # --- Debug Options ---
 
     debug_osm_id: StringProperty(

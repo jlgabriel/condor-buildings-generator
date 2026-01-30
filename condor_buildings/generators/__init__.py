@@ -14,6 +14,10 @@ from .building_generator import (
     generate_building_lod0,
     generate_building_lod1,
     BuildingGeneratorResult,
+    configure_generator,
+    reset_generator_config,
+    get_runtime_config,
+    GeneratorRuntimeConfig,
 )
 
 # Conditional import of polyskel roof generator
@@ -34,4 +38,8 @@ __all__ = [
     'generate_building_lod0',
     'generate_building_lod1',
     'BuildingGeneratorResult',
+    'configure_generator',
+    'reset_generator_config',
+    'get_runtime_config',
+    'GeneratorRuntimeConfig',
 ]

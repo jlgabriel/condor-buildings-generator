@@ -4,7 +4,7 @@
 
 This is a Python pipeline that generates 3D building meshes from OpenStreetMap (OSM) data for Condor 3 flight simulator. It produces OBJ files with UV coordinates for texture mapping.
 
-**Available as:** CLI tool + Blender addon (v0.5.0+)
+**Available as:** CLI tool + Blender addon (v0.6.1+)
 
 ## How to Run the Pipeline
 
@@ -99,7 +99,7 @@ condor_buildings/
 - `docs/TECHNICAL_DOCUMENTATION.md` - Complete technical reference
 - `docs/CHANGELOG_*.md` - Detailed changelogs for each version
 
-## Blender Addon Usage (v0.5.0+)
+## Blender Addon Usage (v0.6.1+)
 
 The addon supports the real Condor folder structure:
 
@@ -144,14 +144,35 @@ result = download_osm_for_patch(metadata, output_dir="./", filename_prefix="map"
 
 ```bash
 # From project root
-powershell -Command "Compress-Archive -Path 'condor_buildings' -DestinationPath 'condor_buildings_v0.5.0.zip' -Force"
+powershell -Command "Compress-Archive -Path 'condor_buildings' -DestinationPath 'condor_buildings_v0.6.1.zip' -Force"
+```
+
+## Runtime Configuration (v0.6.1+)
+
+Configure generator parameters before processing:
+
+```python
+from condor_buildings.generators import configure_generator
+
+# Override defaults before processing
+configure_generator(
+    gable_height=4.0,           # Roof peak height (default 3.0m)
+    roof_overhang_lod0=0.3,     # Overhang distance (default 0.5m)
+    floor_z_epsilon=0.5,        # Sink below terrain (default 0.3m)
+    gabled_max_floors=3,        # Max floors for gabled (default 2)
+    polyskel_max_vertices=15,   # Max verts for polyskel (default 12)
+)
 ```
 
 ## Current Version
 
-v0.5.0 - Condor workflow support:
-- Auto-detect landscapes from Condor folder structure
-- Download OSM data on-the-fly from Overpass API
-- Batch patch processing (X/Y range)
-- Save output to Working/Autogen folder
-- Import meshes directly into Blender viewport
+v0.6.1 - Configurable parameters in Blender UI:
+- Gable height, roof overhang, floor Z offset adjustable in UI
+- Max floors for gabled/hipped roofs configurable
+- Min rectangularity and polyskel max vertices in Advanced panel
+- Random seed for reproducible results
+- Runtime configuration system (`configure_generator()`)
+
+Previous versions:
+- v0.6.0: Polyskel hipped roofs for 5-12 vertex buildings
+- v0.5.0: Condor workflow support (auto-detect landscapes, download OSM, batch processing)

@@ -75,6 +75,108 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# RUNTIME CONFIGURATION
+# =============================================================================
+# These values can be updated at runtime via configure_generator()
+# to allow Blender addon users to override defaults without modifying code.
+
+@dataclass
+class GeneratorRuntimeConfig:
+    """
+    Runtime configuration for the building generator.
+
+    These parameters can be set before processing a batch of buildings
+    to override module-level constants.
+    """
+    # Roof geometry
+    gable_height: float = GABLE_HEIGHT_FIXED
+    hipped_height: float = HIPPED_HEIGHT_FIXED
+    roof_overhang_lod0: float = ROOF_OVERHANG_LOD0
+
+    # Floor Z
+    floor_z_epsilon: float = 0.3  # From config.FLOOR_Z_EPSILON
+
+    # Eligibility constraints
+    gabled_max_floors: int = GABLED_MAX_FLOORS
+    hipped_max_floors: int = HIPPED_MAX_FLOORS
+    gabled_min_rectangularity: float = 0.70  # From config.GABLED_MIN_RECTANGULARITY
+    polyskel_max_vertices: int = POLYSKEL_MAX_VERTICES
+
+    # House-scale constraints
+    house_max_area: float = HOUSE_MAX_FOOTPRINT_AREA
+    house_max_side: float = HOUSE_MAX_SIDE_LENGTH
+    house_min_side: float = HOUSE_MIN_SIDE_LENGTH
+    house_max_aspect: float = HOUSE_MAX_ASPECT_RATIO
+
+
+# Global runtime config instance (can be updated via configure_generator)
+_runtime_config = GeneratorRuntimeConfig()
+
+
+def configure_generator(
+    gable_height: Optional[float] = None,
+    hipped_height: Optional[float] = None,
+    roof_overhang_lod0: Optional[float] = None,
+    floor_z_epsilon: Optional[float] = None,
+    gabled_max_floors: Optional[int] = None,
+    hipped_max_floors: Optional[int] = None,
+    gabled_min_rectangularity: Optional[float] = None,
+    polyskel_max_vertices: Optional[int] = None,
+    house_max_area: Optional[float] = None,
+    house_max_side: Optional[float] = None,
+    house_min_side: Optional[float] = None,
+    house_max_aspect: Optional[float] = None,
+) -> None:
+    """
+    Configure the building generator runtime parameters.
+
+    Call this function before processing a batch of buildings to override
+    the default values. Pass None to keep the current value.
+
+    Example:
+        configure_generator(gable_height=4.0, gabled_max_floors=3)
+        result = generate_building_lod0(building)
+    """
+    global _runtime_config
+
+    if gable_height is not None:
+        _runtime_config.gable_height = gable_height
+    if hipped_height is not None:
+        _runtime_config.hipped_height = hipped_height
+    if roof_overhang_lod0 is not None:
+        _runtime_config.roof_overhang_lod0 = roof_overhang_lod0
+    if floor_z_epsilon is not None:
+        _runtime_config.floor_z_epsilon = floor_z_epsilon
+    if gabled_max_floors is not None:
+        _runtime_config.gabled_max_floors = gabled_max_floors
+    if hipped_max_floors is not None:
+        _runtime_config.hipped_max_floors = hipped_max_floors
+    if gabled_min_rectangularity is not None:
+        _runtime_config.gabled_min_rectangularity = gabled_min_rectangularity
+    if polyskel_max_vertices is not None:
+        _runtime_config.polyskel_max_vertices = polyskel_max_vertices
+    if house_max_area is not None:
+        _runtime_config.house_max_area = house_max_area
+    if house_max_side is not None:
+        _runtime_config.house_max_side = house_max_side
+    if house_min_side is not None:
+        _runtime_config.house_min_side = house_min_side
+    if house_max_aspect is not None:
+        _runtime_config.house_max_aspect = house_max_aspect
+
+
+def reset_generator_config() -> None:
+    """Reset generator configuration to defaults."""
+    global _runtime_config
+    _runtime_config = GeneratorRuntimeConfig()
+
+
+def get_runtime_config() -> GeneratorRuntimeConfig:
+    """Get current runtime configuration (for inspection/debugging)."""
+    return _runtime_config
+
+
 @dataclass
 class BuildingGeneratorResult:
     """Result of building generation."""
@@ -137,12 +239,20 @@ def generate_building_lod0(building: BuildingRecord) -> BuildingGeneratorResult:
         warnings=[],
     )
 
+    # Use runtime config for overhang
+    overhang = _runtime_config.roof_overhang_lod0
+
     # First, determine what roof type will actually be used
     # This is needed BEFORE generating walls for pentagonal gable walls
     actual_roof_type, ridge_params = _determine_roof_type(
         building,
-        overhang=ROOF_OVERHANG_LOD0,
-        result=result
+        overhang=overhang,
+        result=result,
+        house_max_area=_runtime_config.house_max_area,
+        house_max_side=_runtime_config.house_max_side,
+        house_min_side=_runtime_config.house_min_side,
+        house_max_aspect=_runtime_config.house_max_aspect,
+        gabled_max_floors=_runtime_config.gabled_max_floors,
     )
 
     # Generate walls based on actual roof type
@@ -169,8 +279,9 @@ def generate_building_lod0(building: BuildingRecord) -> BuildingGeneratorResult:
     # Generate roof
     roof_mesh, actual_roof_type = _generate_roof(
         building,
-        overhang=ROOF_OVERHANG_LOD0,
-        result=result
+        overhang=overhang,
+        result=result,
+        gabled_max_floors=_runtime_config.gabled_max_floors,
     )
     result.mesh.merge(roof_mesh)
     result.actual_roof_type = actual_roof_type
@@ -215,7 +326,12 @@ def generate_building_lod1(building: BuildingRecord) -> BuildingGeneratorResult:
     actual_roof_type, ridge_params = _determine_roof_type(
         building,
         overhang=0.0,  # LOD1 has no overhang
-        result=result
+        result=result,
+        house_max_area=_runtime_config.house_max_area,
+        house_max_side=_runtime_config.house_max_side,
+        house_min_side=_runtime_config.house_min_side,
+        house_max_aspect=_runtime_config.house_max_aspect,
+        gabled_max_floors=_runtime_config.gabled_max_floors,
     )
 
     # Generate walls based on actual roof type
@@ -243,7 +359,8 @@ def generate_building_lod1(building: BuildingRecord) -> BuildingGeneratorResult:
     roof_mesh, actual_roof_type = _generate_roof(
         building,
         overhang=0.0,
-        result=result
+        result=result,
+        gabled_max_floors=_runtime_config.gabled_max_floors,
     )
     result.mesh.merge(roof_mesh)
     result.actual_roof_type = actual_roof_type
@@ -309,7 +426,7 @@ def _determine_roof_type(
     # Hipped roof - check eligibility
     if requested_type == RoofType.HIPPED:
         # Check floor count restriction
-        if building.floors > HIPPED_MAX_FLOORS:
+        if building.floors > _runtime_config.hipped_max_floors:
             result.fallback_reason = RoofFallbackReason.TOO_MANY_FLOORS
             building.roof_fallback_reason = RoofFallbackReason.TOO_MANY_FLOORS
             return RoofType.FLAT, None
@@ -370,9 +487,9 @@ def _determine_roof_type(
             ridge_direction = _get_ridge_direction(building, outer_ring)
             obb = compute_obb(outer_ring, ridge_direction)
 
-            # Phase 1: Fixed gable height of 3.0m
-            # Pitch becomes a consequence: pitch = atan(GABLE_HEIGHT_FIXED / half_width)
-            ridge_height = GABLE_HEIGHT_FIXED
+            # Phase 1: Fixed gable height (default 3.0m, configurable)
+            # Pitch becomes a consequence: pitch = atan(gable_height / half_width)
+            ridge_height = _runtime_config.gable_height
             ridge_z = building.wall_top_z + ridge_height
 
             obb_center = (obb['center_x'], obb['center_y'])
@@ -437,12 +554,12 @@ def _generate_roof(
     # Hipped roof - check eligibility
     if requested_type == RoofType.HIPPED:
         # Check floor count restriction
-        if building.floors > HIPPED_MAX_FLOORS:
+        if building.floors > _runtime_config.hipped_max_floors:
             result.fallback_reason = RoofFallbackReason.TOO_MANY_FLOORS
             building.roof_fallback_reason = RoofFallbackReason.TOO_MANY_FLOORS
             result.warnings.append(
                 f"Hipped roof fallback to flat: too many floors "
-                f"({building.floors} > {HIPPED_MAX_FLOORS})"
+                f"({building.floors} > {_runtime_config.hipped_max_floors})"
             )
             return generate_flat_roof(building), RoofType.FLAT
 
@@ -452,10 +569,10 @@ def _generate_roof(
             max_vertices=max_vertices,
             require_convex=require_convex,
             require_no_holes=require_no_holes,
-            house_max_area=house_max_area,
-            house_max_side=house_max_side,
-            house_min_side=house_min_side,
-            house_max_aspect=house_max_aspect,
+            house_max_area=_runtime_config.house_max_area,
+            house_max_side=_runtime_config.house_max_side,
+            house_min_side=_runtime_config.house_min_side,
+            house_max_aspect=_runtime_config.house_max_aspect,
         )
         result.footprint_analysis = analysis
         eligibility = analysis.gabled_eligible
@@ -505,10 +622,10 @@ def _generate_roof(
             max_vertices=max_vertices,
             require_convex=require_convex,
             require_no_holes=require_no_holes,
-            house_max_area=house_max_area,
-            house_max_side=house_max_side,
-            house_min_side=house_min_side,
-            house_max_aspect=house_max_aspect,
+            house_max_area=_runtime_config.house_max_area,
+            house_max_side=_runtime_config.house_max_side,
+            house_min_side=_runtime_config.house_min_side,
+            house_max_aspect=_runtime_config.house_max_aspect,
         )
         result.footprint_analysis = analysis
         eligibility = analysis.gabled_eligible
@@ -612,7 +729,7 @@ def _is_polyskel_eligible(
         return False
 
     # Check polyskel vertex limit
-    if analysis.vertex_count > POLYSKEL_MAX_VERTICES:
+    if analysis.vertex_count > _runtime_config.polyskel_max_vertices:
         return False
 
     # No holes (for now)
@@ -624,7 +741,7 @@ def _is_polyskel_eligible(
         return False
 
     # Floor count check
-    if building.floors > HIPPED_MAX_FLOORS:
+    if building.floors > _runtime_config.hipped_max_floors:
         return False
 
     return True

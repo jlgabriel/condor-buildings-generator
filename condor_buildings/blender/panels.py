@@ -155,6 +155,14 @@ class CONDOR_PT_roof_options_panel(Panel):
         else:
             layout.label(text="Only tagged houses", icon='INFO')
 
+        # Roof geometry parameters
+        box = layout.box()
+        box.label(text="Roof Geometry", icon='MOD_SOLIDIFY')
+        col = box.column(align=True)
+        col.prop(props, "gable_height")
+        col.prop(props, "roof_overhang")
+        col.prop(props, "gabled_max_floors")
+
 
 class CONDOR_PT_advanced_panel(Panel):
     """Advanced settings sub-panel"""
@@ -180,6 +188,24 @@ class CONDOR_PT_advanced_panel(Panel):
         col.prop(props, "house_max_side")
         col.prop(props, "house_min_side")
         col.prop(props, "house_max_aspect")
+
+        # Geometry constraints
+        box = layout.box()
+        box.label(text="Geometry Constraints", icon='MESH_DATA')
+
+        col = box.column(align=True)
+        col.prop(props, "gabled_min_rectangularity")
+        col.prop(props, "polyskel_max_vertices")
+
+        # Terrain integration
+        box = layout.box()
+        box.label(text="Terrain Integration", icon='WORLD')
+        box.prop(props, "floor_z_epsilon")
+
+        # Reproducibility
+        box = layout.box()
+        box.label(text="Reproducibility", icon='FILE_REFRESH')
+        box.prop(props, "global_seed")
 
 
 class CONDOR_PT_debug_panel(Panel):
