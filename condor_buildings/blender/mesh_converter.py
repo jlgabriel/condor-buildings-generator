@@ -6,7 +6,7 @@ Handles vertex conversion, face indexing, and UV coordinate mapping.
 """
 
 import bpy
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 # Import MeshData type for type hints (conditional to allow testing outside Blender)
 try:
@@ -18,15 +18,17 @@ except ImportError:
 def meshdata_to_blender(
     mesh_data,  # MeshData
     name: str = "building",
-    collection: Optional[bpy.types.Collection] = None
+    collection: Optional[bpy.types.Collection] = None,
+    use_osm_id: bool = True
 ) -> bpy.types.Object:
     """
     Convert a MeshData instance to a Blender mesh object.
 
     Args:
         mesh_data: Pipeline MeshData with vertices, faces, and UVs
-        name: Base name for the object (osm_id will be used if available)
+        name: Base name for the object
         collection: Target collection (defaults to active collection)
+        use_osm_id: If True and osm_id is set, use it as name (default: True)
 
     Returns:
         Created Blender object
@@ -36,8 +38,8 @@ def meshdata_to_blender(
         - Blender uses 0-based indices
         - Conversion is handled automatically
     """
-    # Use osm_id as name if available
-    if mesh_data.osm_id:
+    # Use osm_id as name if available and use_osm_id is True
+    if use_osm_id and mesh_data.osm_id:
         name = f"building_{mesh_data.osm_id}"
 
     # Create new mesh and object
@@ -199,3 +201,46 @@ def cleanup_buildings_collection(name: str = "Condor Buildings") -> int:
         bpy.data.objects.remove(obj, do_unlink=True)
 
     return count
+
+
+def import_grouped_meshes_to_blender(
+    grouped_meshes: Dict,  # Dict[str, MeshData]
+    collection_name: str = "Condor Buildings"
+) -> List[bpy.types.Object]:
+    """
+    Import grouped meshes to Blender as separate named objects.
+
+    Each group (houses, apartment_walls, etc.) becomes a separate Blender
+    object with the group name. This matches the OBJ export format with
+    multiple 'o' objects.
+
+    Args:
+        grouped_meshes: Dictionary mapping group name to MeshData
+        collection_name: Name for the collection to hold buildings
+
+    Returns:
+        List of created Blender objects
+    """
+    if not grouped_meshes:
+        return []
+
+    # Create collection for buildings
+    collection = create_buildings_collection(collection_name)
+
+    # Import each group as a named object
+    objects = []
+    for group_name, mesh_data in grouped_meshes.items():
+        # Skip empty meshes
+        if mesh_data.is_empty():
+            continue
+
+        # Create object with group name (don't use osm_id)
+        obj = meshdata_to_blender(
+            mesh_data,
+            name=group_name,
+            collection=collection,
+            use_osm_id=False
+        )
+        objects.append(obj)
+
+    return objects

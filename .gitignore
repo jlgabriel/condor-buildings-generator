@@ -25,6 +25,13 @@ blend-example/
 
 # Proyecto BLOSM (sub-proyecto externo)
 blosm-release/
+bpypolyskel-master/
+
+# Releases (ZIPs para Blender)
+condor_buildings_v*.zip
+
+# Fake Condor (testing local)
+fake_condor/
 
 # Configuración local
 .claude/
@@ -37,6 +44,7 @@ Thumbs.db
 
 # Archivos especiales/vacíos
 nul
+_nul
 
 # Plans de desarrollo (interno)
 plans/

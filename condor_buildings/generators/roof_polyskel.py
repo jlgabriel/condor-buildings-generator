@@ -151,9 +151,12 @@ def generate_polyskel_roof(
     # Record face count before adding roof geometry
     faces_before = len(mesh.faces)
 
+    # Compute ridge_z (maximum roof height)
+    ridge_z = wall_top_z + roof_height
+
     # Build mesh from polyskel faces
     _build_mesh_from_faces(
-        mesh, faces, vectors, n_roof_verts, eave_z, roof_index
+        mesh, faces, vectors, n_roof_verts, eave_z, roof_index, ridge_z
     )
 
     faces_after = len(mesh.faces)
@@ -379,23 +382,188 @@ def _expand_footprint(
     return expanded
 
 
+def _compute_face_uvs(
+    face_vertices: List[Tuple[float, float, float]],
+    eave_z: float,
+    ridge_z: float,
+    roof_index: int
+) -> List[Tuple[float, float]]:
+    """
+    Compute UV coordinates using orthographic planar projection for U
+    and global building Z height for V.
+
+    Algorithm:
+    1. Compute face normal from first 3 vertices (cross product)
+    2. Define local 2D coordinate system on the face plane:
+       - V-axis: "up" direction (projected Z onto face plane)
+       - U-axis: perpendicular to V-axis within face plane
+    3. Project all vertices onto face plane (for U in meters)
+    4. Both U and V scaled by the same global_height reference:
+       - U = projected_meters / global_height
+       - V = (world_z - eave_z) / global_height mapped to atlas range
+
+    Key properties:
+    - Shape preservation: planar projection preserves face shape for U
+    - Consistent tile size: both U and V use the same physical scale
+      (global roof height), so tiles are identical across all faces
+    - Correct aspect ratio: 1 meter in U = 1 meter in V
+
+    Args:
+        face_vertices: List of (x, y, z) tuples for face vertices (CCW order)
+        eave_z: Z coordinate at eave level (global for building)
+        ridge_z: Z coordinate at ridge level (global for building)
+        roof_index: Roof texture pattern index
+
+    Returns:
+        List of (u, v) tuples, one per vertex
+    """
+    n_verts = len(face_vertices)
+    if n_verts < 3:
+        v_min, v_max = get_roof_v_range(roof_index)
+        return [(0.0, (v_min + v_max) / 2.0)] * n_verts
+
+    # Global height range for the building's roof
+    global_height = ridge_z - eave_z
+    if global_height < 0.01:
+        global_height = 1.0
+
+    # Step 1: Compute face normal from first 3 vertices
+    v0 = face_vertices[0]
+    v1 = face_vertices[1]
+    v2 = face_vertices[2]
+
+    edge1 = (v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2])
+    edge2 = (v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2])
+
+    # Cross product for normal (CCW winding gives outward normal)
+    nx = edge1[1] * edge2[2] - edge1[2] * edge2[1]
+    ny = edge1[2] * edge2[0] - edge1[0] * edge2[2]
+    nz = edge1[0] * edge2[1] - edge1[1] * edge2[0]
+
+    n_len = math.sqrt(nx * nx + ny * ny + nz * nz)
+    if n_len < 0.0001:
+        # Degenerate face, use fallback
+        return _compute_fallback_uvs(face_vertices, eave_z, ridge_z - eave_z if ridge_z > eave_z else 1.0,
+                                      *get_roof_v_range(roof_index))
+
+    nx, ny, nz = nx / n_len, ny / n_len, nz / n_len
+
+    # Step 2: Define local coordinate system on the face plane
+    # V-axis: project world Z onto face plane (the "up" direction on the face)
+    dot_z_n = nz  # dot([0,0,1], [nx,ny,nz]) = nz
+
+    if abs(dot_z_n) > 0.99:
+        # Face is nearly horizontal (flat roof face), use Y as up
+        vax, vay, vaz = 0.0, 1.0, 0.0
+    else:
+        # Project Z onto face plane: Z - (Z.n)*n
+        vax = -dot_z_n * nx
+        vay = -dot_z_n * ny
+        vaz = 1.0 - dot_z_n * nz
+
+        v_len = math.sqrt(vax * vax + vay * vay + vaz * vaz)
+        if v_len < 0.0001:
+            vax, vay, vaz = 0.0, 1.0, 0.0
+        else:
+            vax, vay, vaz = vax / v_len, vay / v_len, vaz / v_len
+
+    # U-axis: perpendicular to both normal and V-axis (cross product)
+    uax = ny * vaz - nz * vay
+    uay = nz * vax - nx * vaz
+    uaz = nx * vay - ny * vax
+
+    u_len = math.sqrt(uax * uax + uay * uay + uaz * uaz)
+    if u_len < 0.0001:
+        uax, uay, uaz = 1.0, 0.0, 0.0
+    else:
+        uax, uay, uaz = uax / u_len, uay / u_len, uaz / u_len
+
+    # Step 3: Project all vertices onto face plane (for U coordinate in meters)
+    origin = face_vertices[0]
+    u_coords = []
+
+    for vx, vy, vz in face_vertices:
+        dx = vx - origin[0]
+        dy = vy - origin[1]
+        dz = vz - origin[2]
+
+        u_2d = dx * uax + dy * uay + dz * uaz
+        u_coords.append(u_2d)
+
+    u_min_2d = min(u_coords)
+
+    # Step 4: Compute UV coordinates
+    # Both U and V use the same scale (global_height as reference) so that
+    # 1 meter in U = 1 meter in V, giving consistent tile size across all faces
+    v_atlas_min, v_atlas_max = get_roof_v_range(roof_index)
+    v_atlas_span = v_atlas_max - v_atlas_min
+
+    uvs = []
+    for i in range(n_verts):
+        vx, vy, vz = face_vertices[i]
+
+        # U: planar projection in meters, scaled by global_height
+        u_final = (u_coords[i] - u_min_2d) / global_height
+
+        # V: world Z relative to building's global eave_z / ridge_z
+        v_fraction = (vz - eave_z) / global_height
+        v_fraction = max(0.0, min(1.0, v_fraction))
+        v_final = v_atlas_min + v_fraction * v_atlas_span
+
+        uvs.append((u_final, v_final))
+
+    return uvs
+
+
+def _compute_fallback_uvs(
+    face_vertices: List[Tuple[float, float, float]],
+    eave_z: float,
+    height_range: float,
+    v_min: float,
+    v_max: float
+) -> List[Tuple[float, float]]:
+    """
+    Fallback UV computation using simple distribution.
+
+    V based on Z height, U evenly distributed.
+    """
+    n_verts = len(face_vertices)
+    uvs = []
+
+    for i, (vx, vy, vz) in enumerate(face_vertices):
+        # V based on height
+        t_height = (vz - eave_z) / height_range
+        t_height = max(0.0, min(1.0, t_height))
+        uv_v = v_min + t_height * (v_max - v_min)
+
+        # U evenly distributed
+        u = i / max(1, n_verts - 1)
+
+        uvs.append((u, uv_v))
+
+    return uvs
+
+
 def _build_mesh_from_faces(
     mesh: MeshData,
     faces: List[List[int]],
     vectors: list,
     n_polygon_verts: int,
     eave_z: float,
-    roof_index: int
+    roof_index: int,
+    ridge_z: float = None
 ) -> None:
     """
-    Convert polyskel faces to MeshData geometry with UV mapping.
+    Convert polyskel faces to MeshData geometry with per-face UV mapping.
 
     For each face returned by polygonize():
     - Polygon boundary vertices (index < n_polygon_verts) get z = eave_z
     - Skeleton vertices (index >= n_polygon_verts) keep their computed z
 
-    UV mapping uses world-space XY coordinates for tiling, same approach
-    as flat roof generation. This gives consistent tiling across all faces.
+    UV mapping is computed per-face to ensure correct texture orientation:
+    - V is based on relative Z height (eave to ridge)
+    - U is based on horizontal position, preserving aspect ratio
+    - Each face is mapped independently for correct texture alignment
 
     Args:
         mesh: MeshData to add geometry to
@@ -404,53 +572,51 @@ def _build_mesh_from_faces(
         n_polygon_verts: Number of original polygon vertices
         eave_z: Z coordinate for eave vertices (polygon boundary)
         roof_index: Roof texture pattern index for UV mapping
+        ridge_z: Z coordinate at ridge level (max height). If None, computed from vectors.
     """
-    v_min, v_max = get_roof_v_range(roof_index)
+    # Compute ridge_z if not provided
+    if ridge_z is None:
+        ridge_z = max(v.z for v in vectors[n_polygon_verts:]) if len(vectors) > n_polygon_verts else eave_z + 3.0
 
     # Build a mapping from polyskel vertex index to MeshData vertex index
-    # We create MeshData vertices on demand and cache the mapping
-    index_map = {}
+    # Note: UVs are computed per-face, so we only cache vertex indices, not UVs
+    vertex_index_map = {}
 
     for face in faces:
         if len(face) < 3:
             continue
 
-        # Create MeshData vertices and UVs for this face
+        # First pass: create MeshData vertices and collect face vertex positions
         face_v_indices = []
-        face_uv_indices = []
+        face_vertices_3d = []  # (x, y, z) for UV computation
 
         for idx in face:
-            if idx not in index_map:
-                v = vectors[idx]
+            v = vectors[idx]
 
-                # Polygon boundary vertices get eave_z,
-                # skeleton vertices keep their computed Z
-                if idx < n_polygon_verts:
-                    z = eave_z
-                else:
-                    z = v.z
+            # Polygon boundary vertices get eave_z,
+            # skeleton vertices keep their computed Z
+            if idx < n_polygon_verts:
+                z = eave_z
+            else:
+                z = v.z
 
+            # Cache vertex index (but not UV - computed per face)
+            if idx not in vertex_index_map:
                 v_idx = mesh.add_vertex(v.x, v.y, z)
+                vertex_index_map[idx] = v_idx
+            else:
+                v_idx = vertex_index_map[idx]
 
-                # UV: world-space tiling
-                u = v.x / 3.0  # 3m = 1.0 UV unit
-                uv_v = (v_min + v_max) / 2.0  # Center of roof slice
-
-                # For skeleton vertices (above eave), shift V toward v_max
-                # to give some slope texture variation
-                if idx >= n_polygon_verts and eave_z != v.z:
-                    # Interpolate V based on height ratio
-                    height_range = (v.z - eave_z)
-                    max_possible = vectors[idx].z - eave_z
-                    if max_possible > 0.01:
-                        t = min(1.0, height_range / max_possible)
-                        uv_v = v_min + t * (v_max - v_min)
-
-                uv_idx = mesh.add_uv(u, uv_v)
-                index_map[idx] = (v_idx, uv_idx)
-
-            v_idx, uv_idx = index_map[idx]
             face_v_indices.append(v_idx)
+            face_vertices_3d.append((v.x, v.y, z))
+
+        # Compute UVs for this face using the per-face algorithm
+        face_uvs = _compute_face_uvs(face_vertices_3d, eave_z, ridge_z, roof_index)
+
+        # Add UV coordinates to mesh and get indices
+        face_uv_indices = []
+        for u, uv_v in face_uvs:
+            uv_idx = mesh.add_uv(u, uv_v)
             face_uv_indices.append(uv_idx)
 
         # Add face to mesh

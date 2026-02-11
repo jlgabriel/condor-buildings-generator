@@ -26,14 +26,16 @@ from .projection import create_projector
 from .io.patch_metadata import load_patch_metadata
 from .io.terrain_loader import load_terrain
 from .io.osm_parser import parse_osm_file
-from .io.obj_exporter import export_obj_lod0, export_obj_lod1, validate_obj_file
+from .io.obj_exporter import export_obj_lod0, export_obj_lod1, validate_obj_file, export_mesh_groups
 from .processing.spatial_index import GridSpatialIndex
 from .processing.floor_z_solver import FloorZSolver
 from .processing.footprint import process_footprint, GabledEligibility
 from .processing.patch_filter import filter_buildings_by_patch_bounds, FilterReason
+from .processing.mesh_grouper import MeshGrouper
 from .generators.building_generator import (
     generate_building_lod0,
     generate_building_lod1,
+    generate_building_separated,
     select_roof_type,
 )
 from .models.building import RoofType
@@ -107,8 +109,10 @@ class PipelineResult:
         report: Detailed statistics and metadata
         lod0_path: Path to LOD0 OBJ file (file mode only)
         lod1_path: Path to LOD1 OBJ file (file mode only)
-        lod0_meshes: List of LOD0 MeshData (memory mode only)
-        lod1_meshes: List of LOD1 MeshData (memory mode only)
+        lod0_meshes: List of LOD0 MeshData (memory mode, legacy)
+        lod1_meshes: List of LOD1 MeshData (memory mode, legacy)
+        grouped_lod0: Dict mapping group name to MeshData (memory mode, new)
+        grouped_lod1: Dict mapping group name to MeshData (memory mode, new)
     """
     success: bool
     report: PipelineReport
@@ -118,8 +122,12 @@ class PipelineResult:
     lod1_path: Optional[str] = None
 
     # Memory mode outputs (for Blender integration)
-    lod0_meshes: Optional[List] = None  # List[MeshData]
-    lod1_meshes: Optional[List] = None  # List[MeshData]
+    lod0_meshes: Optional[List] = None  # List[MeshData] - legacy
+    lod1_meshes: Optional[List] = None  # List[MeshData] - legacy
+
+    # Grouped meshes (new: Dict[str, MeshData])
+    grouped_lod0: Optional[Dict] = None
+    grouped_lod1: Optional[Dict] = None
 
 
 def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
@@ -356,10 +364,14 @@ def run_pipeline(
             )
             return PipelineResult(success=False, report=error_report)
 
-    # Step 6: Process buildings
+    # Step 6: Process buildings using MeshGrouper for texture-based grouping
     logger.info("Processing buildings")
-    lod0_meshes = []
-    lod1_meshes = []
+
+    # Create mesh groupers for LOD0 and LOD1
+    # Groups: houses, apartment_walls, commercial_walls, industrial_walls, flat_roof_1..6
+    grouper_lod0 = MeshGrouper(num_flat_roof_groups=6)
+    grouper_lod1 = MeshGrouper(num_flat_roof_groups=6)
+
     fallback_reasons: Dict[str, int] = {}
     vertex_count_stats: Dict[str, int] = {
         '4_vertices': 0,
@@ -431,36 +443,45 @@ def run_pipeline(
             if source in roof_direction_stats:
                 roof_direction_stats[source] += 1
 
-            # 6d: Generate LOD0
-            lod0_result = generate_building_lod0(building)
-            lod0_meshes.append(lod0_result.mesh)
-            stats.warnings.extend(lod0_result.warnings)
+            # 6d: Generate SEPARATED meshes for LOD0 and LOD1
+            # Using generate_building_separated() which keeps walls and roof separate
+            result_lod0 = generate_building_separated(
+                building,
+                overhang=config.roof_overhang_lod0
+            )
+            result_lod1 = generate_building_separated(
+                building,
+                overhang=0.0
+            )
 
-            # 6e: Generate LOD1
-            lod1_result = generate_building_lod1(building)
-            lod1_meshes.append(lod1_result.mesh)
+            stats.warnings.extend(result_lod0.warnings)
+
+            # Add to groupers (classifies by roof type and building category)
+            grouper_lod0.add_building(building, result_lod0)
+            grouper_lod1.add_building(building, result_lod1)
 
             # Update stats
-            if lod0_result.actual_roof_type == RoofType.GABLED:
+            if result_lod0.actual_roof_type == RoofType.GABLED:
                 stats.gabled_roofs += 1
-            elif lod0_result.actual_roof_type == RoofType.HIPPED:
+            elif result_lod0.actual_roof_type == RoofType.HIPPED:
                 stats.hipped_roofs += 1
             else:
                 stats.flat_roofs += 1
 
-            # Track fallback reasons (use the reason from the generator result)
+            # Track fallback reasons
             if building.roof_type == RoofType.GABLED and \
-               lod0_result.actual_roof_type == RoofType.FLAT:
+               result_lod0.actual_roof_type == RoofType.FLAT:
                 stats.gabled_fallbacks += 1
-                # Record the specific reason from the fallback
-                reason = lod0_result.fallback_reason.value
-                fallback_reasons[reason] = fallback_reasons.get(reason, 0) + 1
+                if result_lod0.fallback_reason:
+                    fallback_reasons[result_lod0.fallback_reason] = \
+                        fallback_reasons.get(result_lod0.fallback_reason, 0) + 1
 
             if building.roof_type == RoofType.HIPPED and \
-               lod0_result.actual_roof_type == RoofType.FLAT:
+               result_lod0.actual_roof_type == RoofType.FLAT:
                 stats.hipped_fallbacks += 1
-                reason = lod0_result.fallback_reason.value
-                fallback_reasons[reason] = fallback_reasons.get(reason, 0) + 1
+                if result_lod0.fallback_reason:
+                    fallback_reasons[result_lod0.fallback_reason] = \
+                        fallback_reasons.get(result_lod0.fallback_reason, 0) + 1
 
             stats.buildings_processed += 1
 
@@ -478,30 +499,37 @@ def run_pipeline(
         f"Processed {stats.buildings_processed} buildings, "
         f"skipped {stats.buildings_skipped}"
     )
+    logger.info(f"Grouping stats:\n{grouper_lod0.get_stats_summary()}")
 
     # Step 6b: Optimize meshes (deduplicate vertices)
     logger.info("Optimizing meshes (vertex deduplication)")
 
+    # Get all mesh groups for optimization
+    lod0_groups = grouper_lod0.get_all_groups()
+    lod1_groups = grouper_lod1.get_all_groups()
+
     # Count vertices before optimization
-    for mesh in lod0_meshes:
+    for name, mesh in lod0_groups.items():
         stats.lod0_vertices_before_optimize += len(mesh.vertices)
-    for mesh in lod1_meshes:
+    for name, mesh in lod1_groups.items():
         stats.lod1_vertices_before_optimize += len(mesh.vertices)
 
-    # Optimize each mesh
-    for mesh in lod0_meshes:
-        opt_result = mesh.optimize(precision=4)
-        stats.lod0_vertices_removed += opt_result.vertices_removed
+    # Optimize each mesh group
+    for name, mesh in lod0_groups.items():
+        if not mesh.is_empty():
+            opt_result = mesh.optimize(precision=4)
+            stats.lod0_vertices_removed += opt_result.vertices_removed
 
-    for mesh in lod1_meshes:
-        opt_result = mesh.optimize(precision=4)
-        stats.lod1_vertices_removed += opt_result.vertices_removed
+    for name, mesh in lod1_groups.items():
+        if not mesh.is_empty():
+            opt_result = mesh.optimize(precision=4)
+            stats.lod1_vertices_removed += opt_result.vertices_removed
 
     # Count mesh totals after optimization
-    for mesh in lod0_meshes:
+    for name, mesh in lod0_groups.items():
         stats.lod0_vertices += len(mesh.vertices)
         stats.lod0_faces += len(mesh.faces)
-    for mesh in lod1_meshes:
+    for name, mesh in lod1_groups.items():
         stats.lod1_vertices += len(mesh.vertices)
         stats.lod1_faces += len(mesh.faces)
 
@@ -524,15 +552,18 @@ def run_pipeline(
     result_lod1_path = None
 
     if output_mode == "file":
-        logger.info("Exporting OBJ files")
+        # Export using new multi-object format (one OBJ with multiple 'o' objects)
+        num_lod0_objects = len(grouper_lod0.get_non_empty_groups())
+        num_lod1_objects = len(grouper_lod1.get_non_empty_groups())
+        logger.info(f"Exporting OBJ files (multi-object: {num_lod0_objects} objects per file)")
 
         # LOD0
         try:
-            result_lod0_path = export_obj_lod0(
-                lod0_meshes,
-                config.patch_id,
-                config.output_dir,
-                use_groups=config.export_groups
+            result_lod0_path = os.path.join(config.output_dir, f"o{config.patch_id}_LOD0.obj")
+            export_mesh_groups(
+                lod0_groups,
+                result_lod0_path,
+                comment=f"LOD0 - Patch {config.patch_id}"
             )
             output_files.append(result_lod0_path)
 
@@ -543,7 +574,7 @@ def run_pipeline(
 
             logger.info(
                 f"Exported LOD0: {stats.lod0_vertices} vertices, "
-                f"{stats.lod0_faces} faces"
+                f"{stats.lod0_faces} faces, {num_lod0_objects} objects"
             )
 
         except Exception as e:
@@ -551,11 +582,11 @@ def run_pipeline(
 
         # LOD1
         try:
-            result_lod1_path = export_obj_lod1(
-                lod1_meshes,
-                config.patch_id,
-                config.output_dir,
-                use_groups=config.export_groups
+            result_lod1_path = os.path.join(config.output_dir, f"o{config.patch_id}_LOD1.obj")
+            export_mesh_groups(
+                lod1_groups,
+                result_lod1_path,
+                comment=f"LOD1 - Patch {config.patch_id}"
             )
             output_files.append(result_lod1_path)
 
@@ -566,13 +597,13 @@ def run_pipeline(
 
             logger.info(
                 f"Exported LOD1: {stats.lod1_vertices} vertices, "
-                f"{stats.lod1_faces} faces"
+                f"{stats.lod1_faces} faces, {num_lod1_objects} objects"
             )
 
         except Exception as e:
             errors.append(f"Failed to export LOD1: {e}")
     else:
-        # Memory mode - meshes will be returned in PipelineResult
+        # Memory mode - grouped meshes will be returned in PipelineResult
         logger.info(
             f"Memory mode: {stats.lod0_vertices} LOD0 vertices, "
             f"{stats.lod1_vertices} LOD1 vertices"
@@ -632,11 +663,14 @@ def run_pipeline(
             lod1_path=result_lod1_path,
         )
     else:
+        # Memory mode: return grouped meshes for Blender import
         return PipelineResult(
             success=report.success,
             report=report,
-            lod0_meshes=lod0_meshes,
-            lod1_meshes=lod1_meshes,
+            lod0_meshes=list(lod0_groups.values()),  # Legacy compatibility
+            lod1_meshes=list(lod1_groups.values()),  # Legacy compatibility
+            grouped_lod0=lod0_groups,  # New: Dict[str, MeshData]
+            grouped_lod1=lod1_groups,  # New: Dict[str, MeshData]
         )
 
 

@@ -66,6 +66,10 @@ class MeshData:
         """Check if mesh has UV coordinates."""
         return len(self.uvs) > 0
 
+    def is_empty(self) -> bool:
+        """Check if mesh has no geometry."""
+        return len(self.vertices) == 0 or len(self.faces) == 0
+
     def add_vertex(self, x: float, y: float, z: float) -> int:
         """
         Add a vertex and return its 1-based index.

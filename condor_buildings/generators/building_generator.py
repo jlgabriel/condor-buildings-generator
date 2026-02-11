@@ -379,6 +379,84 @@ def generate_building_lod1(building: BuildingRecord) -> BuildingGeneratorResult:
     return result
 
 
+# Import SeparatedBuildingResult for the new function
+from ..processing.mesh_grouper import SeparatedBuildingResult
+
+
+def generate_building_separated(
+    building: BuildingRecord,
+    overhang: float = 0.0
+) -> SeparatedBuildingResult:
+    """
+    Generate building with walls and roof as SEPARATE meshes.
+
+    This is used by the MeshGrouper to classify and route walls and roofs
+    to different texture groups. Unlike generate_building_lod0/lod1, this
+    function does NOT merge walls and roof into a single mesh.
+
+    Args:
+        building: Building record with all parameters set
+        overhang: Roof overhang in meters (0.0 for LOD1, ~0.5 for LOD0)
+
+    Returns:
+        SeparatedBuildingResult with walls and roof as separate MeshData
+    """
+    # Create temporary result for _determine_roof_type
+    temp_result = BuildingGeneratorResult(
+        mesh=MeshData(osm_id=building.osm_id),
+        actual_roof_type=building.roof_type,
+        warnings=[],
+    )
+
+    # Determine actual roof type
+    actual_roof_type, ridge_params = _determine_roof_type(
+        building,
+        overhang=overhang,
+        result=temp_result,
+        house_max_area=_runtime_config.house_max_area,
+        house_max_side=_runtime_config.house_max_side,
+        house_min_side=_runtime_config.house_min_side,
+        house_max_aspect=_runtime_config.house_max_aspect,
+        gabled_max_floors=_runtime_config.gabled_max_floors,
+    )
+
+    # Generate walls based on actual roof type
+    if actual_roof_type == RoofType.GABLED and ridge_params is not None:
+        ridge_direction, ridge_z, obb_center = ridge_params
+        wall_mesh = generate_walls_for_gabled(
+            building,
+            ridge_direction,
+            ridge_z,
+            obb_center,
+            separate_gable_for_single_floor=True
+        )
+    elif actual_roof_type == RoofType.HIPPED:
+        wall_mesh = generate_walls_for_hipped(building)
+    else:
+        wall_mesh = generate_walls(building)
+
+    # Generate roof (separate, NOT merged)
+    roof_mesh, actual_roof_type = _generate_roof(
+        building,
+        overhang=overhang,
+        result=temp_result,
+        gabled_max_floors=_runtime_config.gabled_max_floors,
+    )
+
+    # Update building record
+    building.actual_roof_type = actual_roof_type
+
+    # Return SEPARATED meshes
+    return SeparatedBuildingResult(
+        walls=wall_mesh,
+        roof=roof_mesh,
+        actual_roof_type=actual_roof_type,
+        category=building.category,
+        fallback_reason=temp_result.fallback_reason.value if temp_result.fallback_reason else None,
+        warnings=temp_result.warnings,
+    )
+
+
 def _determine_roof_type(
     building: BuildingRecord,
     overhang: float,

@@ -565,27 +565,29 @@ def _add_hip_triangle_with_uvs(
     Add a triangular hip face with UV coordinates.
 
     UV mapping:
-    - U: along the base edge (0 to edge_length normalized)
+    - U: along the base edge, aspect ratio preserved
     - V: from eave (v_min) to ridge (v_max)
+
+    The U span is calculated as the aspect ratio of the triangle (base/height),
+    similar to how gabled roofs calculate their UV mapping. This ensures
+    consistent texture scaling regardless of the footprint shape.
 
     Args:
         mesh: MeshData to add to
         v0, v1: Base edge vertex indices (at eave)
         v_ridge: Ridge vertex index
         edge_length: Length of base edge
-        distance: Distance to ridge (perpendicular to edge)
-        tan_pitch: Tangent of roof pitch
+        distance: Distance to ridge (perpendicular to edge, 2D)
+        tan_pitch: Tangent of roof pitch (unused, kept for API compatibility)
         v_min, v_max: V range for roof texture
     """
     # UV coordinates
     # Base vertices at v_min (eave)
     # Ridge vertex at v_max (ridge), centered on U
 
-    # Slope factor for UV V coordinate (accounts for slope distance)
-    slope_dist = distance * math.sqrt(1 + tan_pitch * tan_pitch)
-
-    # Normalize U to texture space
-    u_span = edge_length / slope_dist if slope_dist > 0.01 else 1.0
+    # Use 2D aspect ratio for UV mapping (similar to gabled roofs)
+    # u_span = edge_length / distance gives the aspect ratio of the triangle
+    u_span = edge_length / distance if distance > 0.01 else 1.0
 
     uv0 = mesh.add_uv(0.0, v_min)
     uv1 = mesh.add_uv(u_span, v_min)
@@ -609,29 +611,35 @@ def _add_slope_quad_with_uvs(
     Vertex order (CCW): v0 (eave), v1 (eave), v2 (ridge), v3 (ridge)
 
     UV mapping:
-    - U: along the base edge
+    - U: along the base edge, aspect ratio preserved
     - V: from eave (v_min) to ridge (v_max)
+
+    The U span is calculated using 2D distances (similar to gabled roofs),
+    ensuring consistent texture scaling regardless of the footprint shape.
+    The trapezoidal shape is preserved by offsetting ridge UVs proportionally.
 
     Args:
         mesh: MeshData to add to
         v0, v1: Base edge vertex indices (at eave)
         v2, v3: Ridge edge vertex indices
         edge_length: Length of base edge
-        dist1, dist2: Distances from ridge vertices to their edges
-        tan_pitch: Tangent of roof pitch
+        dist1, dist2: Distances from ridge vertices to their edges (2D)
+        tan_pitch: Tangent of roof pitch (unused, kept for API compatibility)
         v_min, v_max: V range for roof texture
     """
-    # Slope distances
-    slope_dist = max(dist1, dist2) * math.sqrt(1 + tan_pitch * tan_pitch)
-    if slope_dist < 0.01:
-        slope_dist = 1.0
+    # Use 2D distances for UV mapping (similar to gabled roofs)
+    max_dist = max(dist1, dist2)
+    if max_dist < 0.01:
+        max_dist = 1.0
 
-    # U span based on edge length
-    u_span = edge_length / slope_dist
+    # U span based on aspect ratio (edge_length / perpendicular_distance)
+    u_span = edge_length / max_dist
 
     # UV offsets for ridge vertices (trapezoidal shape)
-    u_offset1 = (dist1 / slope_dist) if slope_dist > 0.01 else 0.0
-    u_offset2 = (dist2 / slope_dist) if slope_dist > 0.01 else 0.0
+    # The ridge is shorter than the eave, so we offset inward proportionally
+    # offset = (dist / max_dist) * (u_span / 2) gives the inward offset
+    u_offset1 = (dist1 / max_dist) * (u_span / 2.0)
+    u_offset2 = (dist2 / max_dist) * (u_span / 2.0)
 
     uv0 = mesh.add_uv(0.0, v_min)
     uv1 = mesh.add_uv(u_span, v_min)

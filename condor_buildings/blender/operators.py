@@ -119,7 +119,7 @@ class CONDOR_OT_import_buildings(Operator):
             from ..config import PipelineConfig, RoofSelectionMode
             from ..io.patch_metadata import load_patch_metadata
             from ..generators import configure_generator
-            from .mesh_converter import import_meshes_to_blender, cleanup_buildings_collection
+            from .mesh_converter import import_meshes_to_blender, import_grouped_meshes_to_blender, cleanup_buildings_collection
             from .osm_downloader import download_osm_for_patch
         except ImportError as e:
             self.report({'ERROR'}, f"Failed to import pipeline modules: {e}")
@@ -275,44 +275,44 @@ class CONDOR_OT_import_buildings(Operator):
 
                 # Import to Blender if requested
                 if props.import_to_blender:
-                    meshes_to_import = []
+                    collection_name = f"Condor_{props.landscape_name}_{patch_id}"
+                    cleanup_buildings_collection(collection_name)
 
-                    if props.output_lod in ('LOD0', 'BOTH'):
-                        if result.lod0_meshes:
-                            meshes_to_import.extend(result.lod0_meshes)
-
-                    if props.output_lod == 'LOD1':
-                        if result.lod1_meshes:
-                            meshes_to_import = result.lod1_meshes
-
-                    if meshes_to_import:
-                        collection_name = f"Condor_{props.landscape_name}_{patch_id}"
-                        cleanup_buildings_collection(collection_name)
-
+                    # Use new grouped meshes (v0.6.3+)
+                    if props.output_lod in ('LOD0', 'BOTH') and result.grouped_lod0:
                         try:
-                            objects = import_meshes_to_blender(
-                                meshes_to_import,
-                                collection_name=collection_name,
-                                join_meshes=False
+                            objects = import_grouped_meshes_to_blender(
+                                result.grouped_lod0,
+                                collection_name=collection_name
                             )
                             total_objects.extend(objects)
                             total_buildings += len(objects)
                         except Exception as e:
                             errors.append(f"Patch {patch_id}: Blender import failed: {e}")
 
-                        # Also import LOD1 if BOTH
-                        if props.output_lod == 'BOTH' and result.lod1_meshes:
-                            collection_name_lod1 = f"Condor_{props.landscape_name}_{patch_id}_LOD1"
-                            cleanup_buildings_collection(collection_name_lod1)
+                    if props.output_lod == 'LOD1' and result.grouped_lod1:
+                        try:
+                            objects = import_grouped_meshes_to_blender(
+                                result.grouped_lod1,
+                                collection_name=collection_name
+                            )
+                            total_objects.extend(objects)
+                            total_buildings += len(objects)
+                        except Exception as e:
+                            errors.append(f"Patch {patch_id}: LOD1 import failed: {e}")
 
-                            try:
-                                import_meshes_to_blender(
-                                    result.lod1_meshes,
-                                    collection_name=collection_name_lod1,
-                                    join_meshes=False
-                                )
-                            except Exception as e:
-                                errors.append(f"Patch {patch_id}: LOD1 import failed: {e}")
+                    # Also import LOD1 if BOTH
+                    if props.output_lod == 'BOTH' and result.grouped_lod1:
+                        collection_name_lod1 = f"Condor_{props.landscape_name}_{patch_id}_LOD1"
+                        cleanup_buildings_collection(collection_name_lod1)
+
+                        try:
+                            import_grouped_meshes_to_blender(
+                                result.grouped_lod1,
+                                collection_name=collection_name_lod1
+                            )
+                        except Exception as e:
+                            errors.append(f"Patch {patch_id}: LOD1 import failed: {e}")
 
         finally:
             props.is_processing = False

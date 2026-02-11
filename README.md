@@ -1,6 +1,6 @@
 # Condor Buildings Generator
 
-[![Version](https://img.shields.io/badge/version-0.6.2-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
+[![Version](https://img.shields.io/badge/version-0.6.8-blue.svg)](https://github.com/yourusername/condor-buildings-generator)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![Blender](https://img.shields.io/badge/blender-4.0+-orange.svg)](https://www.blender.org/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
@@ -28,9 +28,9 @@ python -m condor_buildings.main \
   --verbose
 ```
 
-### Option 2: Blender Addon (v0.6.2+)
+### Option 2: Blender Addon (v0.5.0+)
 
-1. Download `condor_buildings_v0.6.2.zip` from releases
+1. Download `condor_buildings_v0.6.8.zip` from releases
 2. In Blender: Edit > Preferences > Add-ons > Install
 3. Select the ZIP file
 4. Enable "Condor Buildings Generator" addon
@@ -41,17 +41,20 @@ python -m condor_buildings.main \
 9. Set patch range (X/Y min/max) or enable single patch mode
 10. Click "Generate Buildings"
 
+**New in v0.6.8:**
+- **Correct polyskel roof UV mapping**: Roof tiles now have consistent size and aspect ratio across all faces of complex hipped roofs (L/T/U-shaped buildings). Uses orthographic planar projection with unified global scaling.
+
+**New in v0.6.3:**
+- **Texture-based mesh grouping**: Buildings grouped into 10 objects by texture type for optimal rendering in Condor (single draw call per texture)
+
 **New in v0.6.2:**
 - **Automatic vertex optimization**: Mesh vertex deduplication reduces file size by ~63% with no configuration required
-- Smaller OBJ files load faster in Blender and Condor
 
 **New in v0.6.1:**
-- **Configurable parameters in UI**: Gable height, roof overhang, floor Z offset, max floors, rectangularity, polyskel vertices, and random seed can now be adjusted directly in Blender
-- All pipeline parameters are now accessible without modifying code
+- **Configurable parameters in UI**: Gable height, roof overhang, floor Z offset, max floors, rectangularity, polyskel vertices, and random seed adjustable in Blender
 
 **New in v0.6.0:**
-- **Polyskel hipped roofs**: Buildings with 5-12 vertices now get proper hipped roofs (using bpypolyskel straight skeleton algorithm)
-- L-shaped, T-shaped, and U-shaped houses now have realistic roofs instead of flat
+- **Polyskel hipped roofs**: Buildings with 5-12 vertices now get proper hipped roofs using bpypolyskel straight skeleton algorithm
 
 **New in v0.5.0:**
 - Auto-detects landscapes from Condor folder structure
@@ -136,7 +139,7 @@ The Condor Buildings Generator is a standalone Python pipeline that generates 3D
 - Classifies buildings by type (house, apartment, industrial, commercial)
 - Generates gabled roofs using OBB-based approach for stability
 - Generates hipped roofs using BLOSM's analytical solution for quadrilaterals
-- Generates hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton (Blender only)
+- Generates hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton with correct UV mapping
 - Computes floor Z from terrain mesh intersection
 - Exports OBJ with per-building groups and UV coordinates
 - Texture atlas support with 6 roof patterns and 12 facade styles
@@ -1334,6 +1337,8 @@ Condor 3D (x, y, z)
 | 0.6.0 | Jan 29, 2025 | Polyskel integration - hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton |
 | 0.6.1 | Jan 30, 2025 | Configurable parameters - expose all key parameters in Blender UI (gable height, overhang, floor Z, max floors, rectangularity, polyskel vertices, seed) |
 | 0.6.2 | Jan 30, 2025 | Vertex optimization - automatic deduplication reduces mesh size by ~63% |
+| 0.6.3 | Jan 31, 2025 | Texture-based mesh grouping (10 objects by texture type) and hipped roof UV mapping fix for non-square footprints |
+| 0.6.8 | Feb 10, 2025 | Correct polyskel roof UV mapping - consistent tile size and aspect ratio across all faces using orthographic planar projection with unified global Z scaling |
 
 ### Changelog Files
 
