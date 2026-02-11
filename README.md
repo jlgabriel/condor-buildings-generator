@@ -1317,28 +1317,28 @@ Condor 3D (x, y, z)
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
-| 0.1.0 | Jan 2025 | Initial release with basic gabled/flat roof support |
-| 0.2.0 | Jan 11, 2025 | Robust gabled roofs - restricted to 4-vertex rectangles, explicit fallback reasons, UV groundwork |
-| 0.2.1 | Jan 11, 2025 | Ridge direction fix (parallel to longest edge), house-scale size gate |
-| 0.2.2 | Jan 12, 2025 | Gable wall connection fix, roof underside faces, enhanced debug logging |
-| 0.2.3 | Jan 13, 2025 | Geometry v3 - visible overhang, gable end caps, double-sided roof faces |
-| 0.2.4 | Jan 16, 2025 | Geometry v4 - pentagonal gable walls, independent roof body |
-| 0.2.5 | Jan 17, 2025 | Phase 1 complete - fixed 3.0m gable height, separated gable for 1-floor |
-| 0.3.0 | Jan 18, 2025 | Phase 2 - UV mapping + texture atlas (6 roof patterns, 12 facade styles) |
-| 0.3.1 | Jan 19, 2025 | UV V coordinate inversion fix (V=1.0 at atlas top) |
-| 0.3.2 | Jan 20, 2025 | Side wall UV multi-floor fix (per-floor quads) |
-| 0.3.3 | Jan 20, 2025 | Sidewall UV no-split (continuous UV), gabled floor limit (max 2) |
-| 0.3.4 | Jan 21, 2025 | Wall UV 3m blocks + door offset, hipped roofs implementation |
-| 0.3.5 | Jan 24, 2025 | Roof selection mode (`geometry` / `osm_tags_only`), CLAUDE.md quick reference |
-| 0.3.6 | Jan 24, 2025 | Hipped roof Z positioning fix (no more floating), house-scale thresholds +20% |
-| 0.3.7 | Jan 25, 2025 | Hipped roof walls use continuous quads (no floor splits) |
-| 0.4.0 | Jan 27, 2025 | Blender addon integration - import buildings directly into Blender |
-| 0.5.0 | Jan 27, 2025 | Condor workflow support - auto-detect landscapes, download OSM from Overpass, batch patch processing |
-| 0.6.0 | Jan 29, 2025 | Polyskel integration - hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton |
-| 0.6.1 | Jan 30, 2025 | Configurable parameters - expose all key parameters in Blender UI (gable height, overhang, floor Z, max floors, rectangularity, polyskel vertices, seed) |
-| 0.6.2 | Jan 30, 2025 | Vertex optimization - automatic deduplication reduces mesh size by ~63% |
-| 0.6.3 | Jan 31, 2025 | Texture-based mesh grouping (10 objects by texture type) and hipped roof UV mapping fix for non-square footprints |
-| 0.6.8 | Feb 10, 2025 | Correct polyskel roof UV mapping - consistent tile size and aspect ratio across all faces using orthographic planar projection with unified global Z scaling |
+| 0.1.0 | Jan 2026 | Initial release with basic gabled/flat roof support |
+| 0.2.0 | Jan 11, 2026 | Robust gabled roofs - restricted to 4-vertex rectangles, explicit fallback reasons, UV groundwork |
+| 0.2.1 | Jan 11, 2026 | Ridge direction fix (parallel to longest edge), house-scale size gate |
+| 0.2.2 | Jan 12, 2026 | Gable wall connection fix, roof underside faces, enhanced debug logging |
+| 0.2.3 | Jan 13, 2026 | Geometry v3 - visible overhang, gable end caps, double-sided roof faces |
+| 0.2.4 | Jan 16, 2026 | Geometry v4 - pentagonal gable walls, independent roof body |
+| 0.2.5 | Jan 17, 2026 | Phase 1 complete - fixed 3.0m gable height, separated gable for 1-floor |
+| 0.3.0 | Jan 18, 2026 | Phase 2 - UV mapping + texture atlas (6 roof patterns, 12 facade styles) |
+| 0.3.1 | Jan 19, 2026 | UV V coordinate inversion fix (V=1.0 at atlas top) |
+| 0.3.2 | Jan 20, 2026 | Side wall UV multi-floor fix (per-floor quads) |
+| 0.3.3 | Jan 20, 2026 | Sidewall UV no-split (continuous UV), gabled floor limit (max 2) |
+| 0.3.4 | Jan 21, 2026 | Wall UV 3m blocks + door offset, hipped roofs implementation |
+| 0.3.5 | Jan 24, 2026 | Roof selection mode (`geometry` / `osm_tags_only`), CLAUDE.md quick reference |
+| 0.3.6 | Jan 24, 2026 | Hipped roof Z positioning fix (no more floating), house-scale thresholds +20% |
+| 0.3.7 | Jan 25, 2026 | Hipped roof walls use continuous quads (no floor splits) |
+| 0.4.0 | Jan 27, 2026 | Blender addon integration - import buildings directly into Blender |
+| 0.5.0 | Jan 27, 2026 | Condor workflow support - auto-detect landscapes, download OSM from Overpass, batch patch processing |
+| 0.6.0 | Jan 29, 2026 | Polyskel integration - hipped roofs for 5-12 vertex buildings using bpypolyskel straight skeleton |
+| 0.6.1 | Jan 30, 2026 | Configurable parameters - expose all key parameters in Blender UI (gable height, overhang, floor Z, max floors, rectangularity, polyskel vertices, seed) |
+| 0.6.2 | Jan 30, 2026 | Vertex optimization - automatic deduplication reduces mesh size by ~63% |
+| 0.6.3 | Jan 31, 2026 | Texture-based mesh grouping (10 objects by texture type) and hipped roof UV mapping fix for non-square footprints |
+| 0.6.8 | Feb 10, 2026 | Correct polyskel roof UV mapping - consistent tile size and aspect ratio across all faces using orthographic planar projection with unified global Z scaling |
 
 ### Changelog Files
 
@@ -1373,4 +1373,6 @@ This project was developed by:
 
 - **Juan Luis Gabriel** - Project Manager & Orchestrator. Coordinated requirements gathering, communication between team members, and project direction.
 
-- **Anthropic Claude Opus 4.5** (via Claude Code) - Software Development. Designed the solution architecture and implemented all code for this project.
+- **Anthropic Claude Opus 4.5** (via Claude Code) - Software Development. Designed the solution architecture and implemented the foundational codebase for this project.
+
+- **Anthropic Claude Opus 4.6** (via Claude Code) - Software Development. Continued development from v0.6.3 onwards, including texture grouping, polyskel UV mapping, and ongoing improvements.
